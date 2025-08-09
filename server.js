@@ -20,7 +20,7 @@ Tekan tombol di bawah untuk membuka aplikasi dan mulai menjelajahi ribuan konten
 
 _untuk informasi dan diskusi periksa grup resmi!_
 
-GGReels`;
+SHReels`;
   await bot.sendMessage(msg.chat.id, text, {
     parse_mode: 'Markdown',
     reply_markup: {
@@ -92,3 +92,4 @@ app.post('/webhook', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Listening on', PORT));
+
