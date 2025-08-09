@@ -26,10 +26,10 @@ GGReels`;
     reply_markup: {
       inline_keyboard: [
         [{ text: '📱 Buka Aplikasi', web_app: { url: 'https://tele-stream-wizard.vercel.app/' } }],
-        [{ text: '🔎 Cari Judul', callback_data: 'cari' }],
+        [{ text: '🔍 Cari Judul', callback_data: 'cari' }],
         [
-          { text: '👥 Grup Resmi', url: 'https://t.me/your_group' },
-          { text: '📦 Bahan Konten', url: 'https://your-site/resources' }
+          { text: '👥 Grup Resmi', callback_data: 'grup' },
+          { text: '📦 Bahan Konten', callback_data: 'bahan' }
         ],
         [{ text: '🔁 RESTART', callback_data: 'restart' }]
       ]
@@ -39,13 +39,48 @@ GGReels`;
 
 bot.on('callback_query', async (q) => {
   const chatId = q.message.chat.id;
+  
   if (q.data === 'cari') {
     await bot.answerCallbackQuery(q.id);
-    await bot.sendMessage(chatId, 'Ketik judul yang ingin dicari…');
+    await bot.sendMessage(chatId, '🔍 *Cari Judul*\n\nKetik judul film atau series yang ingin dicari…', {
+      parse_mode: 'Markdown'
+    });
   }
+  
+  if (q.data === 'grup') {
+    await bot.answerCallbackQuery(q.id);
+    await bot.sendMessage(chatId, '👥 *Grup Resmi*\n\nBergabunglah dengan komunitas kami untuk diskusi dan update terbaru!\n\n🔗 Link: https://t.me/+GABRA-_0qvhiMjc1', {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '👥 Join Grup Resmi', url: 'https://t.me/+GABRA-_0qvhiMjc1' }],
+          [{ text: '🔙 Kembali', callback_data: 'restart' }]
+        ]
+      }
+    });
+  }
+  
+  if (q.data === 'bahan') {
+    await bot.answerCallbackQuery(q.id);
+    await bot.sendMessage(chatId, '📦 *Bahan Konten*\n\nAkses koleksi lengkap konten premium dan eksklusif!\n\n🔗 Link: https://t.me/+mgUNj7DLFF5lMDQ1', {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📦 Akses Bahan Konten', url: 'https://t.me/+mgUNj7DLFF5lMDQ1' }],
+          [{ text: '🔙 Kembali', callback_data: 'restart' }]
+        ]
+      }
+    });
+  }
+  
   if (q.data === 'restart') {
     await bot.answerCallbackQuery(q.id, { text: 'Memulai ulang…' });
-    bot.emit('text', { chat: { id: chatId }, text: '/start' });
+    // Trigger start command
+    const startMsg = {
+      chat: { id: chatId },
+      text: '/start'
+    };
+    bot.emit('text', startMsg);
   }
 });
 
