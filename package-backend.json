@@ -1,0 +1,8 @@
+{
+  "name": "tele-stream-wizard-backend",
+  "version": "1.0.0",
+  "description": "Backend dependencies for Telegram Mini App authentication",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2"
+  }
+}
