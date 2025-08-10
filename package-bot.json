@@ -1,17 +1,16 @@
 {
-  "name": "ggreels-telegram-bot",
+  "name": "telegram-bot-webapp",
   "version": "1.0.0",
-  "description": "Telegram bot for GGReels streaming app",
-  "main": "bot.js",
+  "description": "Telegram bot with webapp",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.64.0",
+    "node-telegram-bot-api": "^0.66.0",
     "dotenv": "^16.3.1"
   },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
