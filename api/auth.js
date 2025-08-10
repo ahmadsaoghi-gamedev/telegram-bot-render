@@ -17,8 +17,24 @@ const supabaseAdmin = createClient(
 );
 
 export default async function handler(req, res) {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(200).end();
+  }
+
+  // Set CORS headers for actual requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+    return res.status(405).json({
+      error: 'Method Not Allowed',
+      message: `Method ${req.method} is not allowed. Use POST instead.`
+    });
   }
 
   try {
@@ -77,9 +93,9 @@ export default async function handler(req, res) {
         })
         .select('id, telegram_id')
         .single();
-        
+
       if (profileError) throw profileError;
-      
+
       profile = newProfile;
     }
 
