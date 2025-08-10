@@ -33,7 +33,7 @@ const getInlineKeyboard = () => {
       [
         {
           text: '📱 Buka Aplikasi',
-          url: webAppUrl
+          web_app: { url: webAppUrl }
         }
       ],
       [
