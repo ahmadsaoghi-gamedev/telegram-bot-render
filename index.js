@@ -1,24 +1,26 @@
-require('dotenv').config({ path: '.env.bot' }); // Load environment variables
+// index.js - Railway deployment
+require('dotenv').config();
+const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
-const http = require('http'); // For creating the HTTP server
 
-const token = process.env.BOT_TOKEN;
-if (!token) {
-  console.error('BOT_TOKEN env is missing. Please set it in .env.bot');
-  process.exit(1); // Exit if token is not set
+const app = express();
+app.use(express.json());
+
+// Environment variables
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const PORT = process.env.PORT || 3000;
+
+if (!BOT_TOKEN) {
+  console.error('BOT_TOKEN environment variable is required');
+  process.exit(1);
 }
 
-const bot = new TelegramBot(token, { polling: false }); // Still using polling: false for webhook
+// Initialize bot (webhook mode for production)
+const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
-// /start command handler
-bot.onText(/^\/start(?:\s(.+))?/, async (msg) => {
-  const chatId = msg.chat.id;
-
-  // pastikan tidak ada reply keyboard yang nyangkut
-  await bot.sendMessage(chatId, ' ', { reply_markup: { remove_keyboard: true } }).catch(() => { });
-
-  const text =
-    `👋 *Selamat Datang!*
+// Helper function to send welcome message
+async function sendWelcomeMessage(chatId) {
+  const text = `👋 *Selamat Datang!*
 
 _PASTIKAN TELEGRAM SUDAH VERSI TERBARU SAAT MENGGUNAKAN BOT INI UNTUK PENGALAMAN YANG LEBIH BAIK!_
 
@@ -28,7 +30,7 @@ _untuk informasi dan diskusi periksa grup resmi!_
 
 SHReels`;
 
-  await bot.sendMessage(chatId, text, {
+  const options = {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
@@ -56,81 +58,166 @@ SHReels`;
         }]
       ]
     }
-  });
+  };
+
+  try {
+    await bot.sendMessage(chatId, text, options);
+    console.log(`Welcome message sent to chat: ${chatId}`);
+  } catch (error) {
+    console.error('Error sending welcome message:', error);
+  }
+}
+
+// Bot handlers
+bot.onText(/^\/start(?:\s(.+))?/, async (msg) => {
+  const chatId = msg.chat.id;
+  console.log(`/start command received from chat: ${chatId}`);
+  
+  try {
+    // Clear any previous keyboard
+    await bot.sendMessage(chatId, ' ', { 
+      reply_markup: { remove_keyboard: true } 
+    }).catch(() => {});
+    
+    await sendWelcomeMessage(chatId);
+  } catch (error) {
+    console.error('Error handling /start command:', error);
+  }
 });
 
-// callback_query handler
-bot.on('callback_query', async (q) => {
-  const chatId = q.message.chat.id;
+// Handle callback queries (button clicks)
+bot.on('callback_query', async (query) => {
+  const chatId = query.message.chat.id;
+  const data = query.data;
   
-  if (q.data === 'cari') {
-    await bot.answerCallbackQuery(q.id);
-    await bot.sendMessage(chatId, 'Ketik judul yang ingin dicari…');
-  }
+  console.log(`Callback query received: ${data} from chat: ${chatId}`);
   
-  if (q.data === 'restart') {
-    await bot.answerCallbackQuery(q.id, { text: 'Memulai ulang…' });
-    // kirim ulang tampilan start
-    const startMsg = { chat: { id: chatId }, text: '/start' };
-    bot.emit('message', startMsg);
-  }
-});
-
-// message handler
-bot.on('message', (m) => {
-  if (!m.text || m.text.startsWith('/')) return;
-  
-  // Kirim hasil pencarian dengan tombol webapp
-  bot.sendMessage(m.chat.id, `Hasil untuk: *${m.text}*\n\nBuka aplikasi untuk melihat hasil lengkap:`, { 
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [{ 
-          text: '📱 Lihat Hasil di App', 
-          web_app: { url: `https://tele-stream-wizard.vercel.app/?search=${encodeURIComponent(m.text)}` } 
-        }],
-        [{ 
-          text: '🔙 Kembali ke Menu', 
-          callback_data: 'restart' 
-        }]
-      ]
+  try {
+    await bot.answerCallbackQuery(query.id);
+    
+    switch (data) {
+      case 'cari':
+        await bot.sendMessage(chatId, 'Ketik judul yang ingin dicari…');
+        break;
+        
+      case 'restart':
+        await bot.answerCallbackQuery(query.id, { text: 'Memulai ulang…' });
+        await sendWelcomeMessage(chatId);
+        break;
+        
+      default:
+        console.log(`Unknown callback data: ${data}`);
     }
-  });
-});
-
-// Create HTTP server to handle webhooks
-const PORT = process.env.PORT || 3000; // Use PORT from env or default to 3000
-
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'POST' && req.url === '/webhook') { // Telegram sends updates to /webhook
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-    req.on('end', async () => {
-      try {
-        const update = JSON.parse(body);
-        await bot.processUpdate(update);
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('OK');
-      } catch (error) {
-        console.error('Error processing update:', error);
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Internal Server Error');
-      }
-    });
-  } else {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not Found');
+  } catch (error) {
+    console.error('Error handling callback query:', error);
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Bot server listening on port ${PORT}`);
-  console.log(`Webhook URL: YOUR_SERVER_URL/webhook`); // User needs to set this webhook URL
+// Handle regular messages (search functionality)
+bot.on('message', async (msg) => {
+  if (!msg.text || msg.text.startsWith('/')) return;
+  
+  const chatId = msg.chat.id;
+  const searchTerm = msg.text;
+  
+  console.log(`Search query received: "${searchTerm}" from chat: ${chatId}`);
+  
+  try {
+    const responseText = `Hasil untuk: *${searchTerm}*
+
+Buka aplikasi untuk melihat hasil lengkap:`;
+
+    const options = {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ 
+            text: '📱 Lihat Hasil di App', 
+            web_app: { 
+              url: `https://tele-stream-wizard.vercel.app/?search=${encodeURIComponent(searchTerm)}` 
+            } 
+          }],
+          [{ 
+            text: '🔙 Kembali ke Menu', 
+            callback_data: 'restart' 
+          }]
+        ]
+      }
+    };
+
+    await bot.sendMessage(chatId, responseText, options);
+  } catch (error) {
+    console.error('Error handling message:', error);
+    // Fallback message
+    try {
+      await bot.sendMessage(chatId, `Mencari: ${searchTerm}...`);
+    } catch (fallbackError) {
+      console.error('Error sending fallback message:', fallbackError);
+    }
+  }
 });
 
-// Error handling for the server
-server.on('error', (error) => {
-  console.error('HTTP server error:', error);
+// Error handling
+bot.on('error', (error) => {
+  console.error('Bot error:', error);
+});
+
+bot.on('polling_error', (error) => {
+  console.error('Polling error:', error);
+});
+
+// Express routes
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Telegram Bot is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Webhook endpoint
+app.post('/webhook', (req, res) => {
+  console.log('Webhook received:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    bot.processUpdate(req.body);
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error processing webhook:', error);
+    res.status(500).send('Error processing update');
+  }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Bot server is running on port ${PORT}`);
+  console.log(`📡 Webhook URL: https://your-railway-domain.up.railway.app/webhook`);
+  console.log(`🤖 Bot token configured: ${BOT_TOKEN ? 'Yes' : 'No'}`);
+  
+  // Log environment info
+  console.log('Environment info:', {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: PORT,
+    BOT_TOKEN_SET: !!BOT_TOKEN
+  });
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully...');
+  process.exit(0);
 });
