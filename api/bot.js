@@ -1,36 +1,95 @@
-// api/bot.js
-let TelegramBot;
+// api/bot.js - Minimal working version
 
-try {
-  TelegramBot = require('node-telegram-bot-api');
-} catch (error) {
-  console.error('Failed to require node-telegram-bot-api:', error);
-  throw error;
+export default async function handler(req, res) {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Handle GET requests (for testing)
+  if (req.method === 'GET') {
+    return res.status(200).json({ status: 'Bot endpoint is working' });
+  }
+
+  // Only accept POST requests
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  try {
+    // Check if BOT_TOKEN exists
+    if (!process.env.BOT_TOKEN) {
+      console.error('BOT_TOKEN is missing');
+      return res.status(500).json({ error: 'BOT_TOKEN not configured' });
+    }
+
+    // Parse the update
+    const update = req.body;
+    
+    if (!update) {
+      return res.status(400).json({ error: 'No update received' });
+    }
+
+    console.log('Received update:', JSON.stringify(update));
+
+    // Handle different update types
+    if (update.message) {
+      await handleMessage(update.message);
+    } else if (update.callback_query) {
+      await handleCallbackQuery(update.callback_query);
+    }
+
+    return res.status(200).json({ status: 'ok' });
+
+  } catch (error) {
+    console.error('Error processing update:', error);
+    return res.status(500).json({ 
+      error: error.message,
+      type: error.constructor.name 
+    });
+  }
 }
 
-let bot;
+async function handleMessage(message) {
+  const chatId = message.chat.id;
+  const text = message.text;
 
-function initBot() {
-  if (!process.env.BOT_TOKEN) {
-    throw new Error('BOT_TOKEN environment variable is required');
+  console.log(`Message from ${chatId}: ${text}`);
+
+  if (text === '/start') {
+    return await sendStartMessage(chatId);
+  } 
+  
+  if (text && !text.startsWith('/')) {
+    return await sendSearchResult(chatId, text);
+  }
+}
+
+async function handleCallbackQuery(query) {
+  const chatId = query.message.chat.id;
+  const data = query.data;
+
+  console.log(`Callback query from ${chatId}: ${data}`);
+
+  // Answer callback query first
+  await answerCallbackQuery(query.id);
+
+  if (data === 'cari') {
+    return await sendMessage(chatId, 'Ketik judul yang ingin dicari…');
   }
   
-  if (bot) return bot;
-  
-  bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
-  
-  // Setup handlers
-  setupHandlers();
-  
-  return bot;
+  if (data === 'restart') {
+    return await sendStartMessage(chatId);
+  }
 }
 
-function setupHandlers() {
-  // Start command handler
-  bot.onText(/^\/start/, async (msg) => {
-    const chatId = msg.chat.id;
-    
-    const text = `👋 *Selamat Datang!*
+async function sendStartMessage(chatId) {
+  const text = `👋 *Selamat Datang!*
 
 _PASTIKAN TELEGRAM SUDAH VERSI TERBARU SAAT MENGGUNAKAN BOT INI UNTUK PENGALAMAN YANG LEBIH BAIK!_
 
@@ -40,151 +99,116 @@ _untuk informasi dan diskusi periksa grup resmi!_
 
 SHReels`;
 
-    const options = {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ 
-            text: '📱 Buka Aplikasi', 
-            web_app: { url: 'https://tele-stream-wizard.vercel.app/' } 
-          }],
-          [{ 
-            text: '🔎 Cari Judul', 
-            callback_data: 'cari' 
-          }],
-          [
-            { 
-              text: '👥 Grup Resmi', 
-              url: 'https://t.me/+GABRA-_0qvhiMjc1' 
-            },
-            { 
-              text: '📦 Bahan Konten', 
-              url: 'https://t.me/+mgUNj7DLFF5lMDQ1' 
-            }
-          ],
-          [{ 
-            text: '🔁 RESTART', 
-            callback_data: 'restart' 
-          }]
-        ]
-      }
-    };
-
-    try {
-      await bot.sendMessage(chatId, text, options);
-    } catch (error) {
-      console.error('Error sending start message:', error);
-      // Fallback without webapp
-      await bot.sendMessage(chatId, 'Bot aktif! Silakan coba lagi.');
-    }
-  });
-
-  // Callback query handler
-  bot.on('callback_query', async (query) => {
-    const chatId = query.message.chat.id;
-    const data = query.data;
-
-    try {
-      await bot.answerCallbackQuery(query.id);
-
-      if (data === 'cari') {
-        await bot.sendMessage(chatId, 'Ketik judul yang ingin dicari…');
-      } else if (data === 'restart') {
-        // Simulate /start command
-        const fakeMsg = {
-          chat: { id: chatId },
-          text: '/start'
-        };
-        bot.emit('text', fakeMsg, ['/start']);
-      }
-    } catch (error) {
-      console.error('Error handling callback query:', error);
-    }
-  });
-
-  // Regular message handler
-  bot.on('message', async (msg) => {
-    if (!msg.text || msg.text.startsWith('/')) return;
-
-    const chatId = msg.chat.id;
-    const searchTerm = msg.text;
-
-    try {
-      const responseText = `Hasil untuk: *${searchTerm}*\n\nBuka aplikasi untuk melihat hasil lengkap:`;
-      const options = {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ 
-              text: '📱 Lihat Hasil di App', 
-              web_app: { 
-                url: `https://tele-stream-wizard.vercel.app/?search=${encodeURIComponent(searchTerm)}` 
-              } 
-            }],
-            [{ 
-              text: '🔙 Kembali ke Menu', 
-              callback_data: 'restart' 
-            }]
-          ]
+  const keyboard = {
+    inline_keyboard: [
+      [{ 
+        text: '📱 Buka Aplikasi', 
+        web_app: { url: 'https://tele-stream-wizard.vercel.app/' } 
+      }],
+      [{ 
+        text: '🔎 Cari Judul', 
+        callback_data: 'cari' 
+      }],
+      [
+        { 
+          text: '👥 Grup Resmi', 
+          url: 'https://t.me/+GABRA-_0qvhiMjc1' 
+        },
+        { 
+          text: '📦 Bahan Konten', 
+          url: 'https://t.me/+mgUNj7DLFF5lMDQ1' 
         }
-      };
+      ],
+      [{ 
+        text: '🔁 RESTART', 
+        callback_data: 'restart' 
+      }]
+    ]
+  };
 
-      await bot.sendMessage(chatId, responseText, options);
-    } catch (error) {
-      console.error('Error handling message:', error);
-      await bot.sendMessage(chatId, `Mencari: ${searchTerm}...`);
-    }
+  return await sendMessage(chatId, text, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard
   });
 }
 
-// Request body reader
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => data += chunk);
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
+async function sendSearchResult(chatId, searchTerm) {
+  const text = `Hasil untuk: *${searchTerm}*
+
+Buka aplikasi untuk melihat hasil lengkap:`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [{ 
+        text: '📱 Lihat Hasil di App', 
+        web_app: { 
+          url: `https://tele-stream-wizard.vercel.app/?search=${encodeURIComponent(searchTerm)}` 
+        } 
+      }],
+      [{ 
+        text: '🔙 Kembali ke Menu', 
+        callback_data: 'restart' 
+      }]
+    ]
+  };
+
+  return await sendMessage(chatId, text, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard
   });
 }
 
-// Main handler function
-module.exports = async (req, res) => {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  // Only accept POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+async function sendMessage(chatId, text, options = {}) {
+  const url = `https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`;
+  
+  const payload = {
+    chat_id: chatId,
+    text: text,
+    ...options
+  };
 
   try {
-    // Initialize bot
-    const botInstance = initBot();
-    
-    // Read and parse request body
-    const body = await readBody(req);
-    const update = JSON.parse(body || '{}');
-    
-    // Process the update
-    await botInstance.processUpdate(update);
-    
-    // Return success
-    res.status(200).json({ status: 'ok' });
-    
-  } catch (error) {
-    console.error('Webhook error:', error);
-    
-    // Return detailed error for debugging
-    res.status(500).json({
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
     });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('Telegram API error:', error);
+      throw new Error(`Telegram API error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error sending message:', error);
+    throw error;
   }
-};
+}
+
+async function answerCallbackQuery(callbackQueryId, text = '') {
+  const url = `https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerCallbackQuery`;
+  
+  const payload = {
+    callback_query_id: callbackQueryId,
+    text: text
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error answering callback query:', error);
+    throw error;
+  }
+}
