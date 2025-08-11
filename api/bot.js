@@ -23,34 +23,19 @@ Tekan tombol di bawah untuk membuka aplikasi dan mulai menjelajahi ribuan konten
 
 _untuk informasi dan diskusi periksa grup resmi!_
 
-SHReels`;
+GGReels`;
 
       await bot.sendMessage(chatId, text, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ 
-              text: '📱 Buka Aplikasi', 
-              web_app: { url: 'https://tele-stream-wizard.vercel.app/' } 
-            }],
-            [{ 
-              text: '🔎 Cari Judul', 
-              callback_data: 'cari' 
-            }],
+            [{ text: '📱 Buka Aplikasi', web_app: { url: 'https://tele-stream-wizard.vercel.app/' } }],
+            [{ text: '🔎 Cari Judul', callback_data: 'cari' }],
             [
-              { 
-                text: '👥 Grup Resmi', 
-                url: 'https://t.me/+GABRA-_0qvhiMjc1' 
-              },
-              { 
-                text: '📦 Bahan Konten', 
-                url: 'https://t.me/+mgUNj7DLFF5lMDQ1' 
-              }
+              { text: '👥 Grup Resmi', url: 'https://t.me/+GABRA-_0qvhiMjc1' },
+              { text: '📦 Bahan Konten', url: 'https://t.me/+mgUNj7DLFF5lMDQ1' }
             ],
-            [{ 
-              text: '🔁 RESTART', 
-              callback_data: 'restart' 
-            }]
+            [{ text: '🔁 RESTART', callback_data: 'restart' }]
           ]
         }
       });
@@ -58,39 +43,20 @@ SHReels`;
 
     bot.on('callback_query', async (q) => {
       const chatId = q.message.chat.id;
-      
       if (q.data === 'cari') {
         await bot.answerCallbackQuery(q.id);
         await bot.sendMessage(chatId, 'Ketik judul yang ingin dicari…');
       }
-      
       if (q.data === 'restart') {
         await bot.answerCallbackQuery(q.id, { text: 'Memulai ulang…' });
         // kirim ulang tampilan start
-        const startMsg = { chat: { id: chatId }, text: '/start' };
-        bot.emit('message', startMsg);
+        bot.emit('text', { chat: { id: chatId }, text: '/start' });
       }
     });
 
     bot.on('message', (m) => {
       if (!m.text || m.text.startsWith('/')) return;
-      
-      // Kirim hasil pencarian dengan tombol webapp
-      bot.sendMessage(m.chat.id, `Hasil untuk: *${m.text}*\n\nBuka aplikasi untuk melihat hasil lengkap:`, { 
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ 
-              text: '📱 Lihat Hasil di App', 
-              web_app: { url: `https://tele-stream-wizard.vercel.app/?search=${encodeURIComponent(m.text)}` } 
-            }],
-            [{ 
-              text: '🔙 Kembali ke Menu', 
-              callback_data: 'restart' 
-            }]
-          ]
-        }
-      });
+      bot.sendMessage(m.chat.id, `Hasil untuk: *${m.text}* (contoh)`, { parse_mode: 'Markdown' });
     });
   }
   return bot;
