@@ -1,14 +1,21 @@
 {
-  "name": "telegram-bot-webapp",
+  "name": "telegram-bot-railway",
   "version": "1.0.0",
-  "description": "Telegram bot with webapp for streaming platform",
-  "type": "module",
+  "description": "Telegram bot with webapp for Railway deployment",
+  "main": "index.js",
   "scripts": {
-    "dev": "vercel dev",
-    "build": "echo 'No build needed'",
-    "start": "echo 'Use vercel dev for local development'"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-telegram-bot-api": "^0.66.0",
+    "dotenv": "^16.3.1"
   },
   "engines": {
-    "node": "18.x"
-  }
+    "node": ">=18.0.0"
+  },
+  "keywords": ["telegram", "bot", "webapp", "railway"],
+  "author": "",
+  "license": "MIT"
 }
