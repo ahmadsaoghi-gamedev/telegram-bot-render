@@ -1,19 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
-// Inisialisasi Supabase dengan kunci ANONYMOUS (untuk operasi biasa)
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
-);
-
-// Inisialisasi Supabase dengan kunci SERVICE_ROLE (untuk operasi admin)
-const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
+// Vercel Serverless Function untuk autentikasi Telegram
 export default async function handler(req, res) {
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,155 +23,34 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'initData is required' });
         }
 
-        console.log('Processing authentication for initData:', initData.substring(0, 50) + '...');
-
-        // --- 1. Verifikasi Data dari Telegram ---
+        // Verify Telegram initData
         const isValid = verifyTelegramInitData(initData);
         if (!isValid) {
-            console.error('Telegram data verification failed');
             return res.status(401).json({ error: 'Invalid Telegram data' });
         }
 
-        // Parse initData untuk mendapatkan user info
+        // Parse initData to get user info
         const userData = parseInitData(initData);
         if (!userData.user) {
-            return res.status(400).json({ error: 'User data not found in initData' });
+            return res.status(400).json({ error: 'User data not found' });
         }
 
-        console.log('Telegram user data:', userData.user);
-
-        // --- 2. Cari atau Buat Profil Pengguna ---
-        const telegramId = userData.user.id;
-
-        // Cari profil yang sudah ada
-        let { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('id, telegram_id, first_name, last_name')
-            .eq('telegram_id', telegramId)
-            .single();
-
-        if (profileError && profileError.code !== 'PGRST116') {
-            console.error('Error fetching profile:', profileError);
-            throw new Error('Database error while fetching profile');
-        }
-
-        // JIKA PROFIL TIDAK DITEMUKAN, BUAT PENGGUNA BARU
-        if (!profile) {
-            console.log('Profile not found, creating new user...');
-
-            // a. Buat pengguna di sistem auth.users Supabase
-            const { data: newUser, error: userError } = await supabaseAdmin.auth.admin.createUser({
-                email: `${telegramId}@telegram.user`, // Email unik dummy
-                email_confirm: true, // Langsung aktifkan
-                user_metadata: {
-                    telegram_id: telegramId,
-                    first_name: userData.user.first_name,
-                    last_name: userData.user.last_name,
-                    username: userData.user.username,
-                    photo_url: userData.user.photo_url
-                }
-            });
-
-            if (userError) {
-                console.error('Error creating auth user:', userError);
-                throw new Error('Failed to create authentication user');
-            }
-
-            console.log('Auth user created:', newUser.user.id);
-
-            // b. Buat profil di tabel 'profiles'
-            const { data: newProfile, error: insertProfileError } = await supabaseAdmin
-                .from('profiles')
-                .insert({
-                    id: newUser.user.id, // Gunakan ID dari auth.users
-                    telegram_id: telegramId,
-                    first_name: userData.user.first_name,
-                    last_name: userData.user.last_name || null,
-                    username: userData.user.username || null,
-                    photo_url: userData.user.photo_url || null,
-                    is_vip: false,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                })
-                .select('id, telegram_id, first_name, last_name')
-                .single();
-
-            if (insertProfileError) {
-                console.error('Error creating profile:', insertProfileError);
-                throw new Error('Failed to create user profile');
-            }
-
-            console.log('Profile created:', newProfile);
-
-            // c. Buat entry points untuk user baru
-            const { error: pointsError } = await supabaseAdmin
-                .from('points')
-                .insert({
-                    user_id: newUser.user.id,
-                    current_points: 0,
-                    total_earned: 0,
-                    total_withdrawn: 0,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                });
-
-            if (pointsError) {
-                console.error('Error creating points:', pointsError);
-                // Don't throw error, points can be created later
-            } else {
-                console.log('Points entry created for user');
-            }
-
-            // d. Handle referral jika ada start_param
-            if (userData.start_param && userData.start_param.startsWith('r_')) {
-                const referrerId = userData.start_param.substring(2);
-                await handleReferral(newUser.user.id, referrerId);
-            }
-
-            profile = newProfile;
-        } else {
-            console.log('Existing profile found:', profile.id);
-
-            // Update profile dengan data Telegram terbaru
-            const { error: updateError } = await supabaseAdmin
-                .from('profiles')
-                .update({
-                    first_name: userData.user.first_name,
-                    last_name: userData.user.last_name || null,
-                    username: userData.user.username || null,
-                    photo_url: userData.user.photo_url || null,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', profile.id);
-
-            if (updateError) {
-                console.error('Error updating profile:', updateError);
-                // Don't throw error, profile update is not critical
-            }
-        }
-
-        // --- 3. Buat JWT Kustom ---
-        const customJWT = createSupabaseJWT(profile, userData.user);
-
-        console.log('Authentication successful for user:', profile.id);
+        // Create custom JWT for Supabase
+        const customJWT = createSupabaseJWT(userData.user);
 
         return res.status(200).json({
             success: true,
             jwt: customJWT,
-            user: userData.user,
-            profile: profile
+            user: userData.user
         });
 
     } catch (error) {
-        console.error('Auth API Error:', error);
-        return res.status(500).json({
-            error: error.message || 'Internal Server Error',
-            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        console.error('Telegram auth error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
-// Verifikasi initData dari Telegram
+// Verify Telegram initData using bot token
 function verifyTelegramInitData(initData) {
     const BOT_TOKEN = process.env.BOT_TOKEN;
     if (!BOT_TOKEN) {
@@ -192,6 +59,7 @@ function verifyTelegramInitData(initData) {
     }
 
     try {
+        // Parse the initData
         const urlParams = new URLSearchParams(initData);
         const hash = urlParams.get('hash');
         urlParams.delete('hash');
@@ -221,7 +89,7 @@ function verifyTelegramInitData(initData) {
     }
 }
 
-// Parse initData untuk mendapatkan informasi user
+// Parse initData to extract user information
 function parseInitData(initData) {
     const urlParams = new URLSearchParams(initData);
     const userData = {};
@@ -243,8 +111,8 @@ function parseInitData(initData) {
     return userData;
 }
 
-// Buat Custom JWT untuk Supabase
-function createSupabaseJWT(profile, telegramUser) {
+// Create custom JWT for Supabase authentication
+function createSupabaseJWT(telegramUser) {
     const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
     if (!SUPABASE_JWT_SECRET) {
         throw new Error('SUPABASE_JWT_SECRET not found in environment variables');
@@ -253,11 +121,11 @@ function createSupabaseJWT(profile, telegramUser) {
     const now = Math.floor(Date.now() / 1000);
     const payload = {
         iss: 'telegram-auth',
-        sub: profile.id,
+        sub: `telegram_${telegramUser.id}`,
         aud: 'authenticated',
         exp: now + (24 * 60 * 60), // 24 hours
         iat: now,
-        email: `${telegramUser.id}@telegram.user`,
+        email: `${telegramUser.id}@telegram.local`,
         app_metadata: {
             provider: 'telegram',
             providers: ['telegram']
@@ -273,42 +141,4 @@ function createSupabaseJWT(profile, telegramUser) {
     };
 
     return jwt.sign(payload, SUPABASE_JWT_SECRET, { algorithm: 'HS256' });
-}
-
-// Handle referral system
-async function handleReferral(newUserId, referrerId) {
-    try {
-        console.log('Processing referral:', { newUserId, referrerId });
-
-        // Check if referrer exists
-        const { data: referrer, error: referrerError } = await supabaseAdmin
-            .from('profiles')
-            .select('id')
-            .eq('id', referrerId)
-            .single();
-
-        if (referrerError || !referrer) {
-            console.error('Referrer not found:', referrerId);
-            return;
-        }
-
-        // Create referral record
-        const { error: referralError } = await supabaseAdmin
-            .from('referrals')
-            .insert({
-                referrer_id: referrerId,
-                referred_id: newUserId,
-                commission_amount: 0,
-                status: 'pending',
-                created_at: new Date().toISOString()
-            });
-
-        if (referralError) {
-            console.error('Error creating referral:', referralError);
-        } else {
-            console.log('Referral created successfully');
-        }
-    } catch (error) {
-        console.error('Referral handling error:', error);
-    }
 }
