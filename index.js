@@ -200,7 +200,7 @@ app.get('/health', (req, res) => {
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Bot server is running on port ${PORT}`);
-  console.log(`📡 Webhook URL: https://your-railway-domain.up.railway.app/webhook`);
+  console.log(`📡 Webhook URL: https://telegram-bot-render-production.up.railway.app/webhook`);
   console.log(`🤖 Bot token configured: ${BOT_TOKEN ? 'Yes' : 'No'}`);
   
   // Log environment info
@@ -221,3 +221,4 @@ process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
   process.exit(0);
 });
+
