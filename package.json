@@ -1,16 +1,14 @@
 {
-  "name": "telegram-bot-render",
+  "name": "telegram-bot-webapp",
   "version": "1.0.0",
-  "description": "Telegram bot for GGReels streaming platform",
-  "main": "server.js",
+  "description": "Telegram bot with webapp for streaming platform",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "node-telegram-bot-api": "^0.64.0"
+    "dev": "vercel dev",
+    "build": "echo 'No build needed'",
+    "start": "echo 'Use vercel dev for local development'"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": "18.x"
   }
 }
