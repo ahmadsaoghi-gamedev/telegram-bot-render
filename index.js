@@ -50,7 +50,7 @@ SHReels`;
             inline_keyboard: [
                 [{
                     text: '📱 Buka Aplikasi',
-                    web_app: { url: 'https://tesminiapp.netlify.app/' }
+                    web_app: { url: 'https://testelegramwebapp.netlify.app/' }
                 }],
                 [{
                     text: '🔎 Cari Judul',
@@ -148,7 +148,7 @@ Buka aplikasi untuk melihat hasil lengkap:`;
                     [{
                         text: '📱 Lihat Hasil di App',
                         web_app: {
-                            url: `https://tesminiapp.netlify.app/?search=${encodeURIComponent(searchTerm)}`
+                            url: `https://testelegramwebapp.netlify.app/?search=${encodeURIComponent(searchTerm)}`
                         }
                     }],
                     [{
@@ -528,5 +528,6 @@ process.on('SIGTERM', () => {
     console.log('Received SIGTERM, shutting down gracefully...');
     process.exit(0);
 });
+
 
 
