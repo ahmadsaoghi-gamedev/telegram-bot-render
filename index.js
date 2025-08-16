@@ -11,7 +11,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({
   origin: [
-    'https://testelegramwebapp.vercel.app',
+    'https://testelegramwebapp.vercel.app/',
     'http://localhost:5173',
     'http://localhost:3000'
   ],
@@ -59,7 +59,7 @@ SHReels`;
             inline_keyboard: [
                 [{
                     text: '📱 Buka Aplikasi',
-                    web_app: { url: 'https://testelegramwebapp.vercel.app' }
+                    web_app: { url: 'https://testelegramwebapp.vercel.app/' }
                 }],
                 [{
                     text: '🔎 Cari Judul',
@@ -706,4 +706,5 @@ process.on('SIGTERM', () => {
     console.log('Received SIGTERM, shutting down gracefully...');
     process.exit(0);
 });
+
 
