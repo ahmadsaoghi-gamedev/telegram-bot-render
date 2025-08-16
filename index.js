@@ -258,7 +258,7 @@ app.get('/api/user-profile/:telegramId', async (req, res) => {
 if (bot) {
     bot.onText(/\/start/, (msg) => {
         const chatId = msg.chat.id;
-        const webAppUrl = 'https://testelegramwebapp.netlify.app';
+        const webAppUrl = 'https://testelegramwebapp.vercel.app';
         
         console.log(`📱 /start from user ${msg.from?.id}`);
         
@@ -292,7 +292,7 @@ if (bot) {
 
     bot.onText(/\/app/, (msg) => {
         const chatId = msg.chat.id;
-        const webAppUrl = 'https://testelegramwebapp.netlify.app';
+        const webAppUrl = 'https://testelegramwebapp.vercel.app';
         
         bot.sendMessage(chatId, '🎬 Buka Aplikasi SHReels:', {
             reply_markup: {
@@ -369,3 +369,4 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
     gracefulShutdown('unhandledRejection');
 });
+
