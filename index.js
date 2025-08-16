@@ -39,7 +39,7 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, {
 });
 
 // Set Webhook URL
-const webhookUrl = `${process.env.RAILWAY_STATIC_URL || 'https://telegram-bot-render-production.up.railway.app/'}/webhook/${process.env.BOT_TOKEN}`;
+const webhookUrl = `${process.env.RAILWAY_STATIC_URL || 'https://telegram-bot-render-production.up.railway.app'}/webhook/${process.env.BOT_TOKEN}`;
 
 // Set webhook when server starts
 bot.setWebHook(webhookUrl).then(() => {
@@ -268,4 +268,5 @@ process.on('SIGINT', () => {
     console.log('🛑 SIGINT received, shutting down gracefully');
     process.exit(0);
 });
+
 
