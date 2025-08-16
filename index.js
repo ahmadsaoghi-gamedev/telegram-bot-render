@@ -10,7 +10,6 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: [
     'https://testelegramwebapp.vercel.app',
-    'https://testelegramwebapp.netlify.app',
     'http://localhost:5173',
     'http://localhost:3000'
   ],
@@ -287,13 +286,19 @@ app.post('/webhook', async (req, res) => {
         await sendTelegramMessage(chat.id, helpCommand.message, helpCommand.keyboard);
       } else if (text === '/profile') {
         await sendTelegramMessage(chat.id, 
-          '👤 Open the app to view your profile!',
+          '👤 Buka aplikasi untuk melihat profil Anda!',
           {
             inline_keyboard: [
               [
                 {
-                  text: '🎬 Open App',
-                  web_app: { url: WEBAPP_URL }
+                  text: '📱 Buka Aplikasi',
+                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
+                }
+              ],
+              [
+                {
+                  text: '🔙 Kembali ke Start',
+                  callback_data: 'start'
                 }
               ]
             ]
@@ -301,13 +306,19 @@ app.post('/webhook', async (req, res) => {
         );
       } else if (text === '/movies') {
         await sendTelegramMessage(chat.id,
-          '🎬 Browse our movie collection in the app!',
+          '🎬 Jelajahi koleksi film kami di aplikasi!',
           {
             inline_keyboard: [
               [
                 {
-                  text: '🎬 Open App',
-                  web_app: { url: WEBAPP_URL }
+                  text: '📱 Buka Aplikasi',
+                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
+                }
+              ],
+              [
+                {
+                  text: '🔙 Kembali ke Start',
+                  callback_data: 'start'
                 }
               ]
             ]
@@ -315,13 +326,39 @@ app.post('/webhook', async (req, res) => {
         );
       } else if (text === '/points') {
         await sendTelegramMessage(chat.id,
-          '💰 Check your points balance in the app!',
+          '💰 Cek saldo poin Anda di aplikasi!',
           {
             inline_keyboard: [
               [
                 {
-                  text: '🎬 Open App',
-                  web_app: { url: WEBAPP_URL }
+                  text: '📱 Buka Aplikasi',
+                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
+                }
+              ],
+              [
+                {
+                  text: '🔙 Kembali ke Start',
+                  callback_data: 'start'
+                }
+              ]
+            ]
+          }
+        );
+      } else if (text === '/cari') {
+        await sendTelegramMessage(chat.id,
+          '🔎 Gunakan fitur pencarian di aplikasi untuk mencari film!',
+          {
+            inline_keyboard: [
+              [
+                {
+                  text: '📱 Buka Aplikasi',
+                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
+                }
+              ],
+              [
+                {
+                  text: '🔙 Kembali ke Start',
+                  callback_data: 'start'
                 }
               ]
             ]
