@@ -1,12 +1,14 @@
-const express = require('express');
-const cors = require('cors');
-const { createClient } = require('@supabase/supabase-js');
+// index.js - Railway deployment with complete bot functionality and profile sync
 require('dotenv').config();
+const express = require('express');
+const TelegramBot = require('node-telegram-bot-api');
+const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware
+app.use(express.json());
 app.use(cors({
   origin: [
     'https://testelegramwebapp.vercel.app',
@@ -15,21 +17,33 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(express.json());
 
-// Supabase client
-const supabaseUrl = process.env.SUPABASE_URL || 'https://otmeyqginakxlyphlrrt.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Environment variables
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const PORT = process.env.PORT || 3000;
 
-// Telegram Bot Token
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const WEBAPP_URL = 'https://testelegramwebapp.vercel.app';
+if (!BOT_TOKEN) {
+    console.error('BOT_TOKEN environment variable is required');
+    process.exit(1);
+}
 
-// Bot Commands
-const BOT_COMMANDS = {
-  start: {
-    message: `👋 *Selamat Datang!*
+// Initialize Supabase clients
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+);
+
+const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Initialize bot (webhook mode for production)
+const bot = new TelegramBot(BOT_TOKEN, { polling: false });
+
+// Helper function to send welcome message
+async function sendWelcomeMessage(chatId) {
+    const text = `👋 *Selamat Datang!*
 
 _PASTIKAN TELEGRAM SUDAH VERSI TERBARU SAAT MENGGUNAKAN BOT INI UNTUK PENGALAMAN YANG LEBIH BAIK!_
 
@@ -37,496 +51,658 @@ Tekan tombol di bawah untuk membuka aplikasi dan mulai menjelajahi ribuan konten
 
 _untuk informasi dan diskusi periksa grup resmi!_
 
-SHReels`,
-    keyboard: {
-      inline_keyboard: [
-        [{
-          text: '📱 Buka Aplikasi',
-          web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-        }],
-        [{
-          text: '🔎 Cari Judul',
-          callback_data: 'cari'
-        }],
-        [
-          {
-            text: '👥 Grup Resmi',
-            url: 'https://t.me/+GABRA-_0qvhiMjc1'
-          },
-          {
-            text: '📦 Bahan Konten',
-            url: 'https://t.me/+mgUNj7DLFF5lMDQ1'
-          }
-        ],
-        [{
-          text: '🔁 RESTART',
-          callback_data: 'restart'
-        }]
-      ]
-    }
-  },
-  help: {
-    message: `❓ *Bantuan SHReels*
+SHReels`;
 
-🎬 *Perintah yang Tersedia:*
-/start - Buka aplikasi utama
-/profile - Lihat profil Anda
-/movies - Jelajahi film yang tersedia
-/points - Cek saldo poin Anda
-
-📱 *Fitur Aplikasi:*
-• Tonton konten premium
-• Dapatkan poin untuk menonton
-• Undang teman untuk bonus
-• Opsi keanggotaan VIP
-
-🔗 *Dukungan:* Hubungi grup resmi untuk bantuan`,
-    keyboard: {
-      inline_keyboard: [
-        [
-          {
-            text: '📱 Buka Aplikasi',
-            web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-          }
-        ],
-        [
-          {
-            text: '🔙 Kembali ke Start',
-            callback_data: 'start'
-          }
-        ]
-      ]
-    }
-  }
-};
-
-// Helper function to send Telegram message
-async function sendTelegramMessage(chatId, text, keyboard = null, parseMode = 'Markdown') {
-  try {
-    const messageData = {
-      chat_id: chatId,
-      text: text,
-      parse_mode: parseMode
+    const options = {
+        parse_mode: 'Markdown',
+        reply_markup: {
+            inline_keyboard: [
+                [{
+                    text: '📱 Buka Aplikasi',
+                    web_app: { url: 'https://testelegramwebapp.vercel.app/' }
+                }],
+                [{
+                    text: '🔎 Cari Judul',
+                    callback_data: 'cari'
+                }],
+                [
+                    {
+                        text: '👥 Grup Resmi',
+                        url: 'https://t.me/+GABRA-_0qvhiMjc1'
+                    },
+                    {
+                        text: '📦 Bahan Konten',
+                        url: 'https://t.me/+mgUNj7DLFF5lMDQ1'
+                    }
+                ],
+                [{
+                    text: '🔁 RESTART',
+                    callback_data: 'restart'
+                }]
+            ]
+        }
     };
 
-    if (keyboard) {
-      messageData.reply_markup = JSON.stringify(keyboard);
+    try {
+        await bot.sendMessage(chatId, text, options);
+        console.log(`Welcome message sent to chat: ${chatId}`);
+    } catch (error) {
+        console.error('Error sending welcome message:', error);
     }
-
-    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(messageData)
-    });
-
-    const result = await response.json();
-    
-    if (!result.ok) {
-      console.error('❌ Telegram API error:', result.description);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('❌ Error sending Telegram message:', error);
-    return false;
-  }
 }
 
-// Handle /start command
-async function handleStartCommand(chatId, username = null) {
-  const command = BOT_COMMANDS.start;
-  
-  // Add personalized greeting if username available
-  let message = command.message;
-  if (username) {
-    message = `👋 Hello @${username}!\n\n` + message;
-  }
-  
-  return await sendTelegramMessage(chatId, message, command.keyboard);
-}
+// Bot handlers
+bot.onText(/^\/start(?:\s(.+))?/, async (msg) => {
+    const chatId = msg.chat.id;
+    console.log(`/start command received from chat: ${chatId}`);
+
+    try {
+        // Clear any previous keyboard
+        await bot.sendMessage(chatId, ' ', {
+            reply_markup: { remove_keyboard: true }
+        }).catch(() => { });
+
+        await sendWelcomeMessage(chatId);
+    } catch (error) {
+        console.error('Error handling /start command:', error);
+    }
+});
 
 // Handle callback queries (button clicks)
-async function handleCallbackQuery(callbackQuery) {
-  const { id, from, data } = callbackQuery;
-  const chatId = from.id;
-  
-  console.log('🔘 Callback query received:', { from: from.username, data });
+bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    const data = query.data;
 
-  let response;
-  
-  switch (data) {
-    case 'start':
-    case 'restart':
-      response = await handleStartCommand(chatId, from.username);
-      break;
-      
-    case 'cari':
-      response = await sendTelegramMessage(chatId, 
-        `🔎 *Cari Judul Film*
+    console.log(`Callback query received: ${data} from chat: ${chatId}`);
 
-Untuk mencari film, buka aplikasi dan gunakan fitur pencarian yang tersedia.
-
-📱 *Fitur Pencarian:*
-• Cari berdasarkan judul
-• Filter berdasarkan genre
-• Urutkan berdasarkan rating
-• Lihat film terpopuler
-
-_Tekan tombol di bawah untuk membuka aplikasi_`,
-        {
-          inline_keyboard: [
-            [
-              {
-                text: '📱 Buka Aplikasi',
-                web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-              }
-            ],
-            [
-              {
-                text: '🔙 Kembali',
-                callback_data: 'start'
-              }
-            ]
-          ]
-        }
-      );
-      break;
-      
-    case 'profile':
-      response = await sendTelegramMessage(chatId, 
-        `👤 *Profil Anda*
-
-📱 Buka aplikasi untuk melihat profil lengkap, poin, dan pengaturan Anda.`,
-        {
-          inline_keyboard: [
-            [
-              {
-                text: '📱 Buka Aplikasi',
-                web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-              }
-            ],
-            [
-              {
-                text: '🔙 Kembali',
-                callback_data: 'start'
-              }
-            ]
-          ]
-        }
-      );
-      break;
-      
-    case 'points':
-      response = await sendTelegramMessage(chatId,
-        `💰 *Poin Anda*
-
-📱 Buka aplikasi untuk cek saldo poin saat ini dan dapatkan lebih banyak reward.`,
-        {
-          inline_keyboard: [
-            [
-              {
-                text: '📱 Buka Aplikasi',
-                web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-              }
-            ],
-            [
-              {
-                text: '🔙 Kembali',
-                callback_data: 'start'
-              }
-            ]
-          ]
-        }
-      );
-      break;
-      
-    case 'help':
-      const helpCommand = BOT_COMMANDS.help;
-      response = await sendTelegramMessage(chatId, helpCommand.message, helpCommand.keyboard);
-      break;
-      
-    default:
-      response = await sendTelegramMessage(chatId, '❓ Perintah tidak dikenal. Gunakan /start untuk memulai.');
-  }
-
-  // Answer callback query to remove loading state
-  if (response) {
     try {
-      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          callback_query_id: id
-        })
-      });
+        await bot.answerCallbackQuery(query.id);
+
+        switch (data) {
+            case 'cari':
+                await bot.sendMessage(chatId, 'Ketik judul yang ingin dicari…');
+                break;
+
+            case 'restart':
+                await bot.answerCallbackQuery(query.id, { text: 'Memulai ulang…' });
+                await sendWelcomeMessage(chatId);
+                break;
+
+            default:
+                console.log(`Unknown callback data: ${data}`);
+        }
     } catch (error) {
-      console.error('❌ Error answering callback query:', error);
+        console.error('Error handling callback query:', error);
     }
-  }
+});
+
+// Handle regular messages (search functionality)
+bot.on('message', async (msg) => {
+    if (!msg.text || msg.text.startsWith('/')) return;
+
+    const chatId = msg.chat.id;
+    const searchTerm = msg.text;
+
+    console.log(`Search query received: "${searchTerm}" from chat: ${chatId}`);
+
+    try {
+        const responseText = `Hasil untuk: *${searchTerm}*
+
+Buka aplikasi untuk melihat hasil lengkap:`;
+
+        const options = {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{
+                        text: '📱 Lihat Hasil di App',
+                        web_app: {
+                            url: `https://testelegramwebapp.vercel.app/?search=${encodeURIComponent(searchTerm)}`
+                        }
+                    }],
+                    [{
+                        text: '🔙 Kembali ke Menu',
+                        callback_data: 'restart'
+                    }]
+                ]
+            }
+        };
+
+        await bot.sendMessage(chatId, responseText, options);
+    } catch (error) {
+        console.error('Error handling message:', error);
+        // Fallback message
+        try {
+            await bot.sendMessage(chatId, `Mencari: ${searchTerm}...`);
+        } catch (fallbackError) {
+            console.error('Error sending fallback message:', fallbackError);
+        }
+    }
+});
+
+// Error handling
+bot.on('error', (error) => {
+    console.error('Bot error:', error);
+});
+
+bot.on('polling_error', (error) => {
+    console.error('Polling error:', error);
+});
+
+// ========================================
+// PROFILE MANAGEMENT ENDPOINTS
+// ========================================
+
+// Get user profile by Telegram ID
+app.get('/api/profile/:telegramId', async (req, res) => {
+    try {
+        const { telegramId } = req.params;
+        
+        console.log(`Fetching profile for Telegram ID: ${telegramId}`);
+
+        const { data: profile, error } = await supabaseAdmin
+            .from('profiles')
+            .select('*')
+            .eq('telegram_id', telegramId)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Profile not found' });
+            }
+            throw error;
+        }
+
+        console.log('Profile found:', profile.id);
+        res.json({ success: true, profile });
+
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update user profile
+app.put('/api/profile/:telegramId', async (req, res) => {
+    try {
+        const { telegramId } = req.params;
+        const updateData = req.body;
+        
+        console.log(`Updating profile for Telegram ID: ${telegramId}`, updateData);
+
+        // Remove sensitive fields
+        delete updateData.id;
+        delete updateData.telegram_id;
+        updateData.updated_at = new Date().toISOString();
+
+        const { data: profile, error } = await supabaseAdmin
+            .from('profiles')
+            .update(updateData)
+            .eq('telegram_id', telegramId)
+            .select()
+            .single();
+
+        if (error) {
+            throw error;
+        }
+
+        console.log('Profile updated successfully');
+        res.json({ success: true, profile });
+
+    } catch (error) {
+        console.error('Error updating profile:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get user points and VIP status
+app.get('/api/user-status/:telegramId', async (req, res) => {
+    try {
+        const { telegramId } = req.params;
+        
+        console.log(`Fetching user status for Telegram ID: ${telegramId}`);
+
+        const { data: profile, error } = await supabaseAdmin
+            .from('profiles')
+            .select('id, telegram_id, username, first_name, last_name, photo_url, points, total_commission, is_vip, vip_expires_at, referral_code, referred_by, created_at, updated_at')
+            .eq('telegram_id', telegramId)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({ error: 'Profile not found' });
+            }
+            throw error;
+        }
+
+        // Calculate VIP status
+        const now = new Date();
+        const vipExpiresAt = profile.vip_expires_at ? new Date(profile.vip_expires_at) : null;
+        const isVipActive = profile.is_vip && vipExpiresAt && vipExpiresAt > now;
+
+        const userStatus = {
+            ...profile,
+            is_vip_active: isVipActive,
+            vip_days_remaining: isVipActive ? Math.ceil((vipExpiresAt - now) / (1000 * 60 * 60 * 24)) : 0
+        };
+
+        console.log('User status fetched successfully');
+        res.json({ success: true, userStatus });
+
+    } catch (error) {
+        console.error('Error fetching user status:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Add points to user
+app.post('/api/add-points/:telegramId', async (req, res) => {
+    try {
+        const { telegramId } = req.params;
+        const { amount, description } = req.body;
+        
+        console.log(`Adding ${amount} points to Telegram ID: ${telegramId}`);
+
+        // Get current points
+        const { data: currentProfile, error: getError } = await supabaseAdmin
+            .from('profiles')
+            .select('points')
+            .eq('telegram_id', telegramId)
+            .single();
+
+        if (getError) throw getError;
+
+        const newPoints = (currentProfile.points || 0) + amount;
+
+        // Update points
+        const { data: profile, error } = await supabaseAdmin
+            .from('profiles')
+            .update({ 
+                points: newPoints,
+                updated_at: new Date().toISOString()
+            })
+            .eq('telegram_id', telegramId)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        console.log(`Points added successfully. New total: ${newPoints}`);
+        res.json({ success: true, profile, pointsAdded: amount, newTotal: newPoints });
+
+    } catch (error) {
+        console.error('Error adding points:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ========================================
+// AUTHENTICATION ENDPOINT
+// ========================================
+
+// Authentication endpoint
+app.post('/api/auth/telegram', async (req, res) => {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    try {
+        const { initData } = req.body;
+
+        if (!initData) {
+            return res.status(400).json({ error: 'initData is required' });
+        }
+
+        console.log('Processing authentication for initData:', initData.substring(0, 50) + '...');
+
+        // Check required environment variables
+        if (!process.env.BOT_TOKEN) {
+            console.error('BOT_TOKEN not found in environment variables');
+            return res.status(500).json({ error: 'Server configuration error: BOT_TOKEN missing' });
+        }
+        if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SUPABASE_JWT_SECRET) {
+            console.error('Supabase environment variables missing');
+            return res.status(500).json({ error: 'Server configuration error: Supabase env vars missing' });
+        }
+
+        // Verifikasi Data dari Telegram
+        const isValid = verifyTelegramInitData(initData);
+        if (!isValid) {
+            console.error('Telegram data verification failed');
+            return res.status(401).json({ error: 'Invalid Telegram data' });
+        }
+
+        // Parse initData untuk mendapatkan user info
+        const userData = parseInitData(initData);
+        if (!userData.user) {
+            return res.status(400).json({ error: 'User data not found in initData' });
+        }
+
+        console.log('Telegram user data:', userData.user);
+
+        // Cari atau Buat Profil Pengguna
+        const telegramId = userData.user.id;
+
+        // Cari profil yang sudah ada
+        let { data: profile, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('*')
+            .eq('telegram_id', telegramId)
+            .single();
+
+        if (profileError && profileError.code !== 'PGRST116') {
+            console.error('Error fetching profile:', profileError);
+            throw new Error('Database error while fetching profile');
+        }
+
+        // JIKA PROFIL TIDAK DITEMUKAN, BUAT PENGGUNA BARU
+        if (!profile) {
+            console.log('Profile not found, creating new user...');
+
+            // Buat pengguna di sistem auth.users Supabase
+            const { data: newUser, error: userError } = await supabaseAdmin.auth.admin.createUser({
+                email: `${telegramId}@telegram.user`,
+                email_confirm: true,
+                user_metadata: {
+                    telegram_id: telegramId,
+                    username: userData.user.username,
+                    first_name: userData.user.first_name,
+                    last_name: userData.user.last_name,
+                    photo_url: userData.user.photo_url
+                }
+            });
+
+            if (userError) {
+                console.error('Error creating auth user:', userError);
+                throw new Error('Failed to create authentication user');
+            }
+
+            console.log('Auth user created:', newUser.user.id);
+
+            // Buat profil di tabel 'profiles' dengan semua field yang diperlukan
+            const { data: newProfile, error: insertProfileError } = await supabaseAdmin
+                .from('profiles')
+                .insert({
+                    id: newUser.user.id,
+                    telegram_id: telegramId,
+                    username: userData.user.username || null,
+                    first_name: userData.user.first_name || 'Unknown',
+                    last_name: userData.user.last_name || null,
+                    photo_url: userData.user.photo_url || null,
+                    points: 0,
+                    total_commission: 0,
+                    is_vip: false,
+                    referral_code: `r_${telegramId}_${Date.now()}`,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+                .select('*')
+                .single();
+
+            if (insertProfileError) {
+                console.error('Error creating profile:', insertProfileError);
+                throw new Error('Failed to create user profile');
+            }
+
+            console.log('Profile created:', newProfile);
+
+            // Handle referral jika ada start_param
+            if (userData.start_param && userData.start_param.startsWith('r_')) {
+                const referrerId = userData.start_param.substring(2);
+                await handleReferral(newUser.user.id, referrerId);
+            }
+
+            profile = newProfile;
+        } else {
+            console.log('Existing profile found:', profile.id);
+
+            // Update profile dengan data Telegram terbaru
+            const { error: updateError } = await supabaseAdmin
+                .from('profiles')
+                .update({
+                    username: userData.user.username || null,
+                    first_name: userData.user.first_name || profile.first_name,
+                    last_name: userData.user.last_name || profile.last_name,
+                    photo_url: userData.user.photo_url || profile.photo_url,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', profile.id);
+
+            if (updateError) {
+                console.error('Error updating profile:', updateError);
+            }
+        }
+
+        // Buat JWT Kustom
+        const customJWT = createSupabaseJWT(profile, userData.user);
+
+        console.log('Authentication successful for user:', profile.id);
+
+        return res.status(200).json({
+            success: true,
+            jwt: customJWT,
+            user: userData.user,
+            profile: profile
+        });
+
+    } catch (error) {
+        console.error('Auth API Error:', error);
+        return res.status(500).json({
+            error: error.message || 'Internal Server Error',
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
+
+// OPTIONS handler for CORS
+app.options('/api/auth/telegram', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.status(200).end();
+});
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+function verifyTelegramInitData(initData) {
+    const BOT_TOKEN = process.env.BOT_TOKEN;
+    if (!BOT_TOKEN) {
+        console.error('BOT_TOKEN not found in environment variables');
+        return false;
+    }
+
+    try {
+        const urlParams = new URLSearchParams(initData);
+        const hash = urlParams.get('hash');
+        urlParams.delete('hash');
+
+        const dataCheckString = Array.from(urlParams.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n');
+
+        const secretKey = crypto
+            .createHmac('sha256', 'WebAppData')
+            .update(BOT_TOKEN)
+            .digest();
+
+        const calculatedHash = crypto
+            .createHmac('sha256', secretKey)
+            .update(dataCheckString)
+            .digest('hex');
+
+        return calculatedHash === hash;
+    } catch (error) {
+        console.error('Error verifying Telegram data:', error);
+        return false;
+    }
 }
 
-// Telegram Webhook endpoint
-app.post('/webhook', async (req, res) => {
-  try {
-    const { message, callback_query } = req.body;
-    
-    if (message) {
-      const { text, from, chat } = message;
-      console.log('📨 Message received:', { text, from: from.username, chat_id: chat.id });
-      
-      if (text === '/start') {
-        await handleStartCommand(chat.id, from.username);
-      } else if (text === '/help') {
-        const helpCommand = BOT_COMMANDS.help;
-        await sendTelegramMessage(chat.id, helpCommand.message, helpCommand.keyboard);
-      } else if (text === '/profile') {
-        await sendTelegramMessage(chat.id, 
-          '👤 Buka aplikasi untuk melihat profil Anda!',
-          {
-            inline_keyboard: [
-              [
-                {
-                  text: '📱 Buka Aplikasi',
-                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-                }
-              ],
-              [
-                {
-                  text: '🔙 Kembali ke Start',
-                  callback_data: 'start'
-                }
-              ]
-            ]
-          }
-        );
-      } else if (text === '/movies') {
-        await sendTelegramMessage(chat.id,
-          '🎬 Jelajahi koleksi film kami di aplikasi!',
-          {
-            inline_keyboard: [
-              [
-                {
-                  text: '📱 Buka Aplikasi',
-                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-                }
-              ],
-              [
-                {
-                  text: '🔙 Kembali ke Start',
-                  callback_data: 'start'
-                }
-              ]
-            ]
-          }
-        );
-      } else if (text === '/points') {
-        await sendTelegramMessage(chat.id,
-          '💰 Cek saldo poin Anda di aplikasi!',
-          {
-            inline_keyboard: [
-              [
-                {
-                  text: '📱 Buka Aplikasi',
-                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-                }
-              ],
-              [
-                {
-                  text: '🔙 Kembali ke Start',
-                  callback_data: 'start'
-                }
-              ]
-            ]
-          }
-        );
-      } else if (text === '/cari') {
-        await sendTelegramMessage(chat.id,
-          '🔎 Gunakan fitur pencarian di aplikasi untuk mencari film!',
-          {
-            inline_keyboard: [
-              [
-                {
-                  text: '📱 Buka Aplikasi',
-                  web_app: { url: 'https://testelegramwebapp.vercel.app/' }
-                }
-              ],
-              [
-                {
-                  text: '🔙 Kembali ke Start',
-                  callback_data: 'start'
-                }
-              ]
-            ]
-          }
-        );
-      }
-    }
-    
-    if (callback_query) {
-      await handleCallbackQuery(callback_query);
-    }
-    
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('❌ Webhook error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
+function parseInitData(initData) {
+    const urlParams = new URLSearchParams(initData);
+    const userData = {};
 
-// Test endpoint
-app.get('/api/test', (req, res) => {
-  res.json({
-    message: 'Railway Backend API is working! 🚀',
-    timestamp: new Date().toISOString(),
-    version: '2.1.0',
-    features: [
-      'CORS enabled for Netlify/Vercel',
-      'Supabase integration',
-      'Telegram bot webhook',
-      'Auto-save user profiles',
-      'Bot command handling',
-      'Web app button integration',
-      'Error handling'
-    ]
-  });
-});
-
-// Save Telegram user endpoint
-app.post('/api/save-telegram-user', async (req, res) => {
-  try {
-    const { telegramUser, referralCode } = req.body;
-    
-    if (!telegramUser || !telegramUser.id) {
-      return res.status(400).json({ success: false, error: 'Invalid telegram user data' });
+    for (const [key, value] of urlParams.entries()) {
+        if (key === 'user') {
+            try {
+                userData.user = JSON.parse(decodeURIComponent(value));
+            } catch (error) {
+                console.error('Error parsing user data:', error);
+            }
+        } else if (key === 'start_param') {
+            userData.start_param = value;
+        } else if (key === 'auth_date') {
+            userData.auth_date = parseInt(value);
+        }
     }
 
-    console.log('💾 Saving Telegram user:', telegramUser);
+    return userData;
+}
 
-    // Check if user exists
-    const { data: existingUser, error: checkError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('telegram_id', telegramUser.id)
-      .single();
-
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('❌ Error checking user:', checkError);
-      return res.status(500).json({ success: false, error: checkError.message });
+function createSupabaseJWT(profile, telegramUser) {
+    const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
+    if (!SUPABASE_JWT_SECRET) {
+        throw new Error('SUPABASE_JWT_SECRET not found in environment variables');
     }
 
-    let userData = {
-      telegram_id: telegramUser.id,
-      first_name: telegramUser.first_name || 'Unknown',
-      last_name: telegramUser.last_name || null,
-      username: telegramUser.username || null,
-      photo_url: telegramUser.photo_url || null,
-      updated_at: new Date().toISOString()
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+        iss: 'telegram-auth',
+        sub: profile.id,
+        aud: 'authenticated',
+        exp: now + (24 * 60 * 60),
+        iat: now,
+        email: `${telegramUser.id}@telegram.user`,
+        app_metadata: {
+            provider: 'telegram',
+            providers: ['telegram']
+        },
+        user_metadata: {
+            telegram_id: telegramUser.id,
+            username: telegramUser.username,
+            first_name: telegramUser.first_name,
+            last_name: telegramUser.last_name,
+            photo_url: telegramUser.photo_url
+        },
+        role: 'authenticated'
     };
 
-    // Add default values for new users
-    if (!existingUser) {
-      userData.points = 0;
-      userData.total_commission = 0;
-      userData.is_vip = false;
-      userData.referral_code = `r_${telegramUser.id}_${Date.now()}`;
-      userData.created_at = new Date().toISOString();
-      userData.membership_type = 'free';
+    return jwt.sign(payload, SUPABASE_JWT_SECRET, { algorithm: 'HS256' });
+}
+
+async function handleReferral(newUserId, referrerId) {
+    try {
+        console.log('Processing referral:', { newUserId, referrerId });
+
+        const { data: referrer, error: referrerError } = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .eq('id', referrerId)
+            .single();
+
+        if (referrerError || !referrer) {
+            console.error('Referrer not found:', referrerId);
+            return;
+        }
+
+        const { error: referralError } = await supabaseAdmin
+            .from('referrals')
+            .insert({
+                referrer_id: referrerId,
+                referred_id: newUserId,
+                commission_amount: 0,
+                status: 'pending',
+                created_at: new Date().toISOString()
+            });
+
+        if (referralError) {
+            console.error('Error creating referral:', referralError);
+        } else {
+            console.log('Referral created successfully');
+        }
+    } catch (error) {
+        console.error('Referral handling error:', error);
     }
+}
 
-    // Handle referral
-    if (!existingUser && referralCode) {
-      const { data: referrer } = await supabase
-        .from('profiles')
-        .select('telegram_id')
-        .eq('referral_code', referralCode)
-        .single();
+// ========================================
+// EXPRESS ROUTES
+// ========================================
 
-      if (referrer) {
-        userData.referred_by = referrer.telegram_id;
-        console.log('🔗 User referred by:', referrer.telegram_id);
-      }
-    }
-
-    let result;
-    if (existingUser) {
-      // Update existing user
-      const { data, error } = await supabase
-        .from('profiles')
-        .update(userData)
-        .eq('telegram_id', telegramUser.id)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Update failed:', error);
-        return res.status(500).json({ success: false, error: error.message });
-      }
-      result = data;
-    } else {
-      // Create new user
-      const { data, error } = await supabase
-        .from('profiles')
-        .insert(userData)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Create failed:', error);
-        return res.status(500).json({ success: false, error: error.message });
-      }
-      result = data;
-    }
-
-    console.log('✅ User saved successfully:', result.id);
-    res.json({ success: true, profile: result });
-
-  } catch (error) {
-    console.error('❌ Save user error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
+app.get('/', (req, res) => {
+    res.json({
+        status: 'OK',
+        message: 'SHReels Telegram Bot API is running',
+        timestamp: new Date().toISOString(),
+        version: '2.0.0',
+        endpoints: [
+            'GET / - Status check',
+            'POST /webhook - Telegram webhook',
+            'GET /health - Health check',
+            'POST /api/auth/telegram - Authentication endpoint',
+            'GET /api/profile/:telegramId - Get user profile',
+            'PUT /api/profile/:telegramId - Update user profile',
+            'GET /api/user-status/:telegramId - Get user status',
+            'POST /api/add-points/:telegramId - Add points to user'
+        ]
+    });
 });
 
-// Get Telegram user endpoint
-app.get('/api/get-telegram-user/:telegramId', async (req, res) => {
-  try {
-    const { telegramId } = req.params;
-    
-    const { data: user, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('telegram_id', telegramId)
-      .single();
+// Webhook endpoint
+app.post('/webhook', (req, res) => {
+    console.log('Webhook received:', JSON.stringify(req.body, null, 2));
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      throw error;
+    try {
+        bot.processUpdate(req.body);
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error('Error processing webhook:', error);
+        res.status(500).send('Error processing update');
     }
+});
 
-    res.json({ success: true, user });
-  } catch (error) {
-    console.error('❌ Get user error:', error);
-    res.status(500).json({ error: error.message });
-  }
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        bot_token_configured: !!BOT_TOKEN,
+        supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+        version: '2.0.0'
+    });
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Railway Backend running on port ${PORT}`);
-  console.log(`🌐 Webhook URL: https://telegram-bot-render-production.up.railway.app/webhook`);
-  console.log(`📱 Web App URL: ${WEBAPP_URL}`);
-  
-  if (BOT_TOKEN) {
-    console.log('🤖 Telegram bot token configured');
-  } else {
-    console.log('⚠️ TELEGRAM_BOT_TOKEN not set - bot features disabled');
-  }
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 SHReels Bot server is running on port ${PORT}`);
+    console.log(`📡 Webhook URL: https://telegram-bot-render-production.up.railway.app/webhook`);
+    console.log(`🔐 Auth URL: https://telegram-bot-render-production.up.railway.app/api/auth/telegram`);
+    console.log(`👤 Profile API: https://telegram-bot-render-production.up.railway.app/api/profile/:telegramId`);
+    console.log(`🤖 Bot token configured: ${BOT_TOKEN ? 'Yes' : 'No'}`);
+
+    // Log environment info
+    console.log('Environment info:', {
+        NODE_ENV: process.env.NODE_ENV,
+        PORT: PORT,
+        BOT_TOKEN_SET: !!BOT_TOKEN,
+        SUPABASE_URL_SET: !!process.env.SUPABASE_URL,
+        SUPABASE_ANON_KEY_SET: !!process.env.SUPABASE_ANON_KEY,
+        SUPABASE_SERVICE_ROLE_KEY_SET: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        SUPABASE_JWT_SECRET_SET: !!process.env.SUPABASE_JWT_SECRET
+    });
 });
 
-module.exports = app;
+// Graceful shutdown
+process.on('SIGINT', () => {
+    console.log('Received SIGINT, shutting down gracefully...');
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('Received SIGTERM, shutting down gracefully...');
+    process.exit(0);
+});
