@@ -11,7 +11,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({
   origin: [
-    'https://testelegramwebapp-main.vercel.app/',
+    'https://testelegramwebapp.vercel.app',
     'http://localhost:5173',
     'http://localhost:3000'
   ],
@@ -42,7 +42,6 @@ const supabaseAdmin = createClient(
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 // Helper function to send welcome message
-// Helper function to send welcome message
 async function sendWelcomeMessage(chatId) {
     const text = `👋 *Selamat Datang!*
 
@@ -60,11 +59,7 @@ SHReels`;
             inline_keyboard: [
                 [{
                     text: '📱 Buka Aplikasi',
-                    web_app: { 
-                        url: 'https://t.me/shreels_bot/shreelsapp',
-                        // Parameter untuk fullscreen (akan ditangani di frontend)
-                        fullscreen: true
-                    }
+                    web_app: { url: 'https://testelegramwebapp.vercel.app/' }
                 }],
                 [{
                     text: '🔎 Cari Judul',
@@ -95,6 +90,7 @@ SHReels`;
         console.error('Error sending welcome message:', error);
     }
 }
+
 // Bot handlers
 bot.onText(/^\/start(?:\s(.+))?/, async (msg) => {
     const chatId = msg.chat.id;
@@ -140,7 +136,7 @@ bot.on('callback_query', async (query) => {
     }
 });
 
-// Update search response untuk fullscreen juga
+// Handle regular messages (search functionality)
 bot.on('message', async (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
 
@@ -161,8 +157,7 @@ Buka aplikasi untuk melihat hasil lengkap:`;
                     [{
                         text: '📱 Lihat Hasil di App',
                         web_app: {
-                            // Tambahkan parameter fullscreen di URL
-                            url: `https://testelegramwebapp-main.vercel.app/?search=${encodeURIComponent(searchTerm)}&fullscreen=true`
+                            url: `https://testelegramwebapp.vercel.app/?search=${encodeURIComponent(searchTerm)}`
                         }
                     }],
                     [{
@@ -184,7 +179,6 @@ Buka aplikasi untuk melihat hasil lengkap:`;
         }
     }
 });
-
 
 // Error handling
 bot.on('error', (error) => {
@@ -712,9 +706,3 @@ process.on('SIGTERM', () => {
     console.log('Received SIGTERM, shutting down gracefully...');
     process.exit(0);
 });
-
-
-
-
-
-
