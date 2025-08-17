@@ -61,7 +61,7 @@ SHReels`;
                 [{
                     text: '📱 Buka Aplikasi',
                     web_app: { 
-                        url: 'https://testelegramwebapp-main.vercel.app/',
+                        url: 'https://t.me/shreels_bot/shreelsapp',
                         // Parameter untuk fullscreen (akan ditangani di frontend)
                         fullscreen: true
                     }
@@ -712,6 +712,7 @@ process.on('SIGTERM', () => {
     console.log('Received SIGTERM, shutting down gracefully...');
     process.exit(0);
 });
+
 
 
 
