@@ -42,6 +42,7 @@ const supabaseAdmin = createClient(
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 // Helper function to send welcome message
+// Helper function to send welcome message
 async function sendWelcomeMessage(chatId) {
     const text = `👋 *Selamat Datang!*
 
@@ -59,7 +60,11 @@ SHReels`;
             inline_keyboard: [
                 [{
                     text: '📱 Buka Aplikasi',
-                    web_app: { url: 'https://testelegramwebapp-main.vercel.app/' }
+                    web_app: { 
+                        url: 'https://testelegramwebapp-main.vercel.app/',
+                        // Parameter untuk fullscreen (akan ditangani di frontend)
+                        fullscreen: true
+                    }
                 }],
                 [{
                     text: '🔎 Cari Judul',
@@ -90,7 +95,6 @@ SHReels`;
         console.error('Error sending welcome message:', error);
     }
 }
-
 // Bot handlers
 bot.onText(/^\/start(?:\s(.+))?/, async (msg) => {
     const chatId = msg.chat.id;
@@ -136,7 +140,7 @@ bot.on('callback_query', async (query) => {
     }
 });
 
-// Handle regular messages (search functionality)
+// Update search response untuk fullscreen juga
 bot.on('message', async (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
 
@@ -157,7 +161,8 @@ Buka aplikasi untuk melihat hasil lengkap:`;
                     [{
                         text: '📱 Lihat Hasil di App',
                         web_app: {
-                            url: `https://testelegramwebapp-main.vercel.app/?search=${encodeURIComponent(searchTerm)}`
+                            // Tambahkan parameter fullscreen di URL
+                            url: `https://testelegramwebapp-main.vercel.app/?search=${encodeURIComponent(searchTerm)}&fullscreen=true`
                         }
                     }],
                     [{
@@ -179,6 +184,7 @@ Buka aplikasi untuk melihat hasil lengkap:`;
         }
     }
 });
+
 
 // Error handling
 bot.on('error', (error) => {
@@ -706,6 +712,7 @@ process.on('SIGTERM', () => {
     console.log('Received SIGTERM, shutting down gracefully...');
     process.exit(0);
 });
+
 
 
 
