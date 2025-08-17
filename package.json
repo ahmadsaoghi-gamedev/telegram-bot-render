@@ -1,41 +1,42 @@
 {
   "name": "shreels-telegram-bot-railway",
   "version": "2.0.0",
-  "description": "SHReels Telegram Bot with Web App Integration",
+  "description": "SHReels Telegram Bot with complete profile management and frontend-backend synchronization",
   "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "postinstall": "echo 'Dependencies installed successfully'"
+  },
+  "dependencies": {
+    "express": "4.18.2",
+    "node-telegram-bot-api": "0.64.0",
+    "dotenv": "16.3.1",
+    "@supabase/supabase-js": "2.38.0",
+    "jsonwebtoken": "9.0.2",
+    "cors": "2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "3.0.1"
+  },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
   },
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "build": "npm ci --omit=dev",
-    "postinstall": "echo 'Dependencies installed successfully'",
-    "clean": "rm -rf node_modules package-lock.json && npm install"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "node-telegram-bot-api": "^0.64.0",
-    "@supabase/supabase-js": "^2.38.0",
-    "jsonwebtoken": "^9.0.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
   "keywords": [
     "telegram",
     "bot",
+    "webapp",
     "railway",
     "supabase",
-    "web-app"
+    "authentication",
+    "profile-management",
+    "shreels"
   ],
   "author": "SHReels Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-     "url": "https://github.com/ahmadsaoghi-gamedev/telegram-bot-render.git"
+    "url": "https://github.com/ahmadsaoghi-gamedev/telegram-bot-render.git"
   }
 }
