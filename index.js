@@ -59,7 +59,7 @@ SHReels`;
       inline_keyboard: [
         [{
           text: '📱 Buka Aplikasi',
-          web_app: { url: 'https://testelegramwebapp-main.vercel.app/?mode=fullscreen&expand=true&source=webapp&autoExpand=true&platform=telegram&compact=false&tgWebAppShowSettings=false' }
+          web_app: { url: 'https://testelegramwebapp-main.vercel.app/?source=webapp&mode=app&fullscreen=true&autoExpand=true' }
         }],
         [{
           text: '🔎 Cari Judul',
@@ -157,7 +157,7 @@ Buka aplikasi untuk melihat hasil lengkap:`;
           [{
             text: '📱 Lihat Hasil di App',
             web_app: {
-              url: `https://testelegramwebapp-main.vercel.app//?search=${encodeURIComponent(searchTerm)}`
+              url: `https://testelegramwebapp-main.vercel.app/?source=webapp&mode=app&fullscreen=true&autoExpand=true&search=${encodeURIComponent(searchTerm)}`
             }
           }],
           [{
@@ -715,6 +715,5 @@ process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
   process.exit(0);
 });
-
 
 
