@@ -4,14 +4,14 @@ const { URL } = require('url');
 const router = express.Router();
 
 /**
- * Video Proxy Server
- * Handles mixed content errors by proxying HTTP video URLs through HTTPS
+ * Simple Video Proxy Server
+ * Converts HTTP video URLs to HTTPS for mixed content issues
  */
 
 // CORS headers for video streaming
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Range, Accept, Accept-Encoding, Accept-Language, Cache-Control, Connection, Host, If-Modified-Since, If-None-Match, User-Agent',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
 };
@@ -74,24 +74,38 @@ function validateVideoUrl(url) {
 /**
  * Handle OPTIONS request for CORS preflight
  */
-router.options('/', (req, res) => {
+router.options('/stream', (req, res) => {
     res.set(corsHeaders);
     res.status(200).end();
 });
 
 /**
- * Main video proxy endpoint - POST method
- * POST /api/proxy-video
+ * Main video proxy endpoint - GET method
+ * GET /api/proxy-video/stream?u=<encoded_url>
  */
-router.post('/', async (req, res) => {
-    try {
-        const { videoUrl } = req.body;
+router.get('/stream', async (req, res) => {
+    // Set CORS headers
+    res.set(corsHeaders);
 
-        // Validate request body
-        if (!videoUrl) {
+    try {
+        const { u: encodedUrl } = req.query;
+
+        // Validate query parameters
+        if (!encodedUrl) {
             return res.status(400).json({
-                error: 'Missing videoUrl parameter',
-                message: 'Please provide videoUrl in request body'
+                error: 'Missing URL parameter',
+                message: 'Please provide "u" parameter with encoded video URL'
+            });
+        }
+
+        // Decode URL
+        let videoUrl;
+        try {
+            videoUrl = decodeURIComponent(encodedUrl);
+        } catch (error) {
+            return res.status(400).json({
+                error: 'Invalid URL encoding',
+                message: 'URL parameter is not properly encoded'
             });
         }
 
@@ -107,8 +121,7 @@ router.post('/', async (req, res) => {
         console.log('🎬 Video proxy request:', {
             videoUrl,
             userAgent: req.get('User-Agent'),
-            range: req.get('Range'),
-            referer: req.get('Referer')
+            range: req.get('Range')
         });
 
         // Prepare fetch options
@@ -144,9 +157,6 @@ router.post('/', async (req, res) => {
                 statusText: response.statusText
             });
         }
-
-        // Set CORS headers
-        res.set(corsHeaders);
 
         // Set content type
         const contentType = getContentType(videoUrl);
@@ -212,9 +222,12 @@ router.post('/', async (req, res) => {
 
 /**
  * Test endpoint for debugging
- * GET /api/proxy-video/test
+ * GET /api/proxy-video/test?url=<video_url>
  */
 router.get('/test', (req, res) => {
+    // Set CORS headers
+    res.set(corsHeaders);
+
     const { url } = req.query;
 
     if (!url) {
@@ -233,6 +246,12 @@ router.get('/test', (req, res) => {
         contentType,
         timestamp: new Date().toISOString()
     });
+});
+
+// Handle OPTIONS request for test endpoint
+router.options('/test', (req, res) => {
+    res.set(corsHeaders);
+    res.status(200).end();
 });
 
 module.exports = router;
