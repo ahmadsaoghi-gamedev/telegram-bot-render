@@ -119,30 +119,8 @@ export default async function handler(req, res) {
 
             console.log('Profile created:', newProfile);
 
-            // c. Buat entry points untuk user baru
-            const { error: pointsError } = await supabaseAdmin
-                .from('points')
-                .insert({
-                    user_id: newUser.user.id,
-                    current_points: 0,
-                    total_earned: 0,
-                    total_withdrawn: 0,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                });
-
-            if (pointsError) {
-                console.error('Error creating points:', pointsError);
-                // Don't throw error, points can be created later
-            } else {
-                console.log('Points entry created for user');
-            }
-
-            // d. Handle referral jika ada start_param
-            if (userData.start_param && userData.start_param.startsWith('r_')) {
-                const referrerId = userData.start_param.substring(2);
-                await handleReferral(newUser.user.id, referrerId);
-            }
+            // Skip points and referrals for now - focus on core authentication
+            console.log('User profile created successfully, skipping optional features');
 
             profile = newProfile;
         } else {
@@ -275,39 +253,11 @@ function createSupabaseJWT(profile, telegramUser) {
     return jwt.sign(payload, SUPABASE_JWT_SECRET, { algorithm: 'HS256' });
 }
 
-// Handle referral system
+// Handle referral system - simplified version
 async function handleReferral(newUserId, referrerId) {
     try {
-        console.log('Processing referral:', { newUserId, referrerId });
-
-        // Check if referrer exists
-        const { data: referrer, error: referrerError } = await supabaseAdmin
-            .from('profiles')
-            .select('id')
-            .eq('id', referrerId)
-            .single();
-
-        if (referrerError || !referrer) {
-            console.error('Referrer not found:', referrerId);
-            return;
-        }
-
-        // Create referral record
-        const { error: referralError } = await supabaseAdmin
-            .from('referrals')
-            .insert({
-                referrer_id: referrerId,
-                referred_id: newUserId,
-                commission_amount: 0,
-                status: 'pending',
-                created_at: new Date().toISOString()
-            });
-
-        if (referralError) {
-            console.error('Error creating referral:', referralError);
-        } else {
-            console.log('Referral created successfully');
-        }
+        console.log('Referral feature temporarily disabled for stability');
+        // TODO: Implement referral system when referrals table is ready
     } catch (error) {
         console.error('Referral handling error:', error);
     }
