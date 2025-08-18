@@ -18,6 +18,15 @@ app.use(cors({
   credentials: true
 }));
 
+// Import video proxy router
+import('./api/proxy-video.js').then(module => {
+  const videoProxyRouter = module.default;
+  app.use('/api', videoProxyRouter);
+  console.log('✅ Video proxy router loaded');
+}).catch(error => {
+  console.error('❌ Failed to load video proxy router:', error);
+});
+
 // Environment variables
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
@@ -59,7 +68,7 @@ SHReels`;
       inline_keyboard: [
         [{
           text: '📱 Buka Aplikasi',
-          web_app: { url: 'https://testelegramwebapp-main.vercel.app/' }
+          web_app: { url: 'https://testelegramwebapp-main.vercel.app/?source=webapp&mode=app&fullscreen=true&autoExpand=true' }
         }],
         [{
           text: '🔎 Cari Judul',
@@ -715,7 +724,5 @@ process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
   process.exit(0);
 });
-
-
 
 
