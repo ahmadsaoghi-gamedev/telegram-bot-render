@@ -707,8 +707,8 @@ app.get('/', (req, res) => {
       "GET /api/user-status/:telegramId - Get user status",
       "POST /api/add-points/:telegramId - Add points to user",
       // NEW: Video proxy endpoints
-      "GET /api/proxy-video/health - Video proxy health check",
-      "POST /api/proxy-video - Video proxy endpoint",
+      "GET /api/proxy-video/healthz - Video proxy health check",
+      "GET /api/proxy-video/stream - Secure video streaming proxy",
       "GET /api/proxy-video/test - Video URL validation"
     ]
   });
