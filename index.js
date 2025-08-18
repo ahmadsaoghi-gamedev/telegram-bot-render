@@ -15,9 +15,6 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 
-// Import video proxy setup
-const { setupVideoProxy } = require('./railway-proxy-video');
-
 // ========================================
 // APP INITIALIZATION
 // ========================================
@@ -44,9 +41,6 @@ app.use(express.json());
 // ========================================
 // VIDEO PROXY SETUP
 // ========================================
-
-// Setup video proxy routes
-setupVideoProxy(app);
 
 // Import video proxy routers
 try {
