@@ -1,4 +1,11 @@
 // index.js - Railway deployment with complete bot functionality and profile sync
+setupVideoProxy(app);
+app.use(cors());
+app.use(express.json());
+
+// Setup video proxy routes
+setupVideoProxy(app);
+
 require('dotenv').config();
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
@@ -6,7 +13,7 @@ const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-
+const { setupVideoProxy } = require('./railway-proxy-video');
 const app = express();
 app.use(express.json());
 app.use(cors({
@@ -649,22 +656,26 @@ async function handleReferral(newUserId, referrerId) {
 // ========================================
 
 app.get('/', (req, res) => {
-  res.json({
-    status: 'OK',
-    message: 'SHReels Telegram Bot API is running',
-    timestamp: new Date().toISOString(),
-    version: '2.0.0',
-    endpoints: [
-      'GET / - Status check',
-      'POST /webhook - Telegram webhook',
-      'GET /health - Health check',
-      'POST /api/auth/telegram - Authentication endpoint',
-      'GET /api/profile/:telegramId - Get user profile',
-      'PUT /api/profile/:telegramId - Update user profile',
-      'GET /api/user-status/:telegramId - Get user status',
-      'POST /api/add-points/:telegramId - Add points to user'
-    ]
-  });
+    res.json({
+        status: "OK",
+        message: "SHReels Telegram Bot API is running",
+        timestamp: new Date().toISOString(),
+        version: "2.0.0",
+        endpoints: [
+            "GET / - Status check",
+            "POST /webhook - Telegram webhook",
+            "GET /health - Health check",
+            "POST /api/auth/telegram - Authentication endpoint",
+            "GET /api/profile/:telegramId - Get user profile",
+            "PUT /api/profile/:telegramId - Update user profile",
+            "GET /api/user-status/:telegramId - Get user status",
+            "POST /api/add-points/:telegramId - Add points to user",
+            // NEW: Video proxy endpoints
+            "GET /api/proxy-video/health - Video proxy health check",
+            "POST /api/proxy-video - Video proxy endpoint",
+            "GET /api/proxy-video/test - Video URL validation"
+        ]
+    });
 });
 
 // Webhook endpoint
