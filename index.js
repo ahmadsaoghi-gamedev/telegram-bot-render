@@ -18,13 +18,20 @@ app.use(cors({
   credentials: true
 }));
 
-// Import video proxy router
+// Import video proxy routers
 try {
-  const videoProxyRouter = require('./api/proxy-video.js');
-  app.use('/api', videoProxyRouter);
-  console.log('✅ Video proxy router loaded');
+  const videoProxyHealthRouter = require('./api/proxy-video/health.js');
+  const videoProxyRouter = require('./api/proxy-video/index.js');
+
+  // Mount health check route
+  app.use('/api/proxy-video', videoProxyHealthRouter);
+
+  // Mount main proxy route
+  app.use('/api/proxy-video', videoProxyRouter);
+
+  console.log('✅ Video proxy routers loaded');
 } catch (error) {
-  console.error('❌ Failed to load video proxy router:', error);
+  console.error('❌ Failed to load video proxy routers:', error);
 }
 
 // Environment variables
