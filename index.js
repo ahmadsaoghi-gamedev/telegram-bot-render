@@ -19,13 +19,13 @@ app.use(cors({
 }));
 
 // Import video proxy router
-import('./api/proxy-video.js').then(module => {
-  const videoProxyRouter = module.default;
+try {
+  const videoProxyRouter = require('./api/proxy-video.js');
   app.use('/api', videoProxyRouter);
   console.log('✅ Video proxy router loaded');
-}).catch(error => {
+} catch (error) {
   console.error('❌ Failed to load video proxy router:', error);
-});
+}
 
 // Environment variables
 const BOT_TOKEN = process.env.BOT_TOKEN;
