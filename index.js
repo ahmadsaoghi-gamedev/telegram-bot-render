@@ -59,7 +59,7 @@ SHReels`;
       inline_keyboard: [
         [{
           text: '📱 Buka Aplikasi',
-          web_app: { url: 'https://shorturl.at/UB9V3' }
+          web_app: { url: 'https://testelegramwebapp-main.vercel.app/' }
         }],
         [{
           text: '🔎 Cari Judul',
@@ -715,6 +715,7 @@ process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
   process.exit(0);
 });
+
 
 
 
