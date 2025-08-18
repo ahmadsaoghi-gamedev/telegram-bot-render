@@ -1,7 +1,7 @@
 {
   "name": "shreels-telegram-bot-railway",
   "version": "2.0.0",
-  "description": "SHReels Telegram Bot with complete profile management and frontend-backend synchronization",
+  "description": "SHReels Telegram Bot with complete profile management, frontend-backend synchronization, and video proxy support",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -14,7 +14,8 @@
     "dotenv": "16.3.1",
     "@supabase/supabase-js": "2.38.0",
     "jsonwebtoken": "9.0.2",
-    "cors": "2.8.5"
+    "cors": "2.8.5",
+    "node-fetch": "2.7.0"
   },
   "devDependencies": {
     "nodemon": "3.0.1"
@@ -31,6 +32,7 @@
     "supabase",
     "authentication",
     "profile-management",
+    "video-proxy",
     "shreels"
   ],
   "author": "SHReels Team",
