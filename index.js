@@ -1,21 +1,34 @@
 // index.js - Railway deployment with complete bot functionality and profile sync
-setupVideoProxy(app);
-app.use(cors());
-app.use(express.json());
 
-// Setup video proxy routes
-setupVideoProxy(app);
+// ========================================
+// IMPORTS AND CONFIGURATION
+// ========================================
 
+// Load environment variables first
 require('dotenv').config();
+
+// Core dependencies
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+
+// Import video proxy setup
 const { setupVideoProxy } = require('./railway-proxy-video');
+
+// ========================================
+// APP INITIALIZATION
+// ========================================
+
 const app = express();
-app.use(express.json());
+
+// ========================================
+// MIDDLEWARE SETUP
+// ========================================
+
+// CORS configuration
 app.use(cors({
   origin: [
     'https://testelegramwebapp-main.vercel.app/',
@@ -24,6 +37,16 @@ app.use(cors({
   ],
   credentials: true
 }));
+
+// Body parsing middleware
+app.use(express.json());
+
+// ========================================
+// VIDEO PROXY SETUP
+// ========================================
+
+// Setup video proxy routes
+setupVideoProxy(app);
 
 // Import video proxy routers
 try {
@@ -41,7 +64,10 @@ try {
   console.error('❌ Failed to load video proxy routers:', error);
 }
 
-// Environment variables
+// ========================================
+// ENVIRONMENT VARIABLES
+// ========================================
+
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
 
@@ -49,6 +75,10 @@ if (!BOT_TOKEN) {
   console.error('BOT_TOKEN environment variable is required');
   process.exit(1);
 }
+
+// ========================================
+// SUPABASE CLIENT INITIALIZATION
+// ========================================
 
 // Initialize Supabase clients
 const supabase = createClient(
@@ -61,8 +91,16 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ========================================
+// TELEGRAM BOT INITIALIZATION
+// ========================================
+
 // Initialize bot (polling mode for development/production)
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
+// ========================================
+// BOT HELPER FUNCTIONS
+// ========================================
 
 // Helper function to send welcome message
 async function sendWelcomeMessage(chatId) {
@@ -113,6 +151,10 @@ SHReels`;
     console.error('Error sending welcome message:', error);
   }
 }
+
+// ========================================
+// BOT EVENT HANDLERS
+// ========================================
 
 // Bot handlers
 bot.onText(/^\/start(?:\s(.+))?/, async (msg) => {
@@ -656,26 +698,26 @@ async function handleReferral(newUserId, referrerId) {
 // ========================================
 
 app.get('/', (req, res) => {
-    res.json({
-        status: "OK",
-        message: "SHReels Telegram Bot API is running",
-        timestamp: new Date().toISOString(),
-        version: "2.0.0",
-        endpoints: [
-            "GET / - Status check",
-            "POST /webhook - Telegram webhook",
-            "GET /health - Health check",
-            "POST /api/auth/telegram - Authentication endpoint",
-            "GET /api/profile/:telegramId - Get user profile",
-            "PUT /api/profile/:telegramId - Update user profile",
-            "GET /api/user-status/:telegramId - Get user status",
-            "POST /api/add-points/:telegramId - Add points to user",
-            // NEW: Video proxy endpoints
-            "GET /api/proxy-video/health - Video proxy health check",
-            "POST /api/proxy-video - Video proxy endpoint",
-            "GET /api/proxy-video/test - Video URL validation"
-        ]
-    });
+  res.json({
+    status: "OK",
+    message: "SHReels Telegram Bot API is running",
+    timestamp: new Date().toISOString(),
+    version: "2.0.0",
+    endpoints: [
+      "GET / - Status check",
+      "POST /webhook - Telegram webhook",
+      "GET /health - Health check",
+      "POST /api/auth/telegram - Authentication endpoint",
+      "GET /api/profile/:telegramId - Get user profile",
+      "PUT /api/profile/:telegramId - Update user profile",
+      "GET /api/user-status/:telegramId - Get user status",
+      "POST /api/add-points/:telegramId - Add points to user",
+      // NEW: Video proxy endpoints
+      "GET /api/proxy-video/health - Video proxy health check",
+      "POST /api/proxy-video - Video proxy endpoint",
+      "GET /api/proxy-video/test - Video URL validation"
+    ]
+  });
 });
 
 // Webhook endpoint
@@ -702,6 +744,10 @@ app.get('/health', (req, res) => {
     version: '2.0.0'
   });
 });
+
+// ========================================
+// SERVER STARTUP
+// ========================================
 
 // Start server
 app.listen(PORT, '0.0.0.0', async () => {
@@ -731,6 +777,10 @@ app.listen(PORT, '0.0.0.0', async () => {
     SUPABASE_JWT_SECRET_SET: !!process.env.SUPABASE_JWT_SECRET
   });
 });
+
+// ========================================
+// GRACEFUL SHUTDOWN
+// ========================================
 
 // Graceful shutdown
 process.on('SIGINT', () => {
