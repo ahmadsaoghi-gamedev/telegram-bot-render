@@ -88,32 +88,58 @@ app.post('/api/xendit/webhook', async (req, res) => {
       }
     }
 
-    const { id, external_id, status, amount, paid_amount, paid_at } = req.body;
+    console.log('📦 Xendit webhook received:', JSON.stringify(req.body, null, 2));
 
-    console.log('📦 Xendit webhook received:', {
-      invoice_id: id,
-      external_id,
-      status,
-      amount,
-      paid_amount,
-      paid_at
-    });
+    const { event, data } = req.body;
 
-    // Process the webhook using Supabase function
-    const { data, error } = await supabaseAdmin.rpc('process_xendit_webhook', {
-      invoice_id: id,
-      payment_status: status,
-      paid_amount: paid_amount || amount,
-      paid_at: paid_at ? new Date(paid_at).toISOString() : new Date().toISOString()
-    });
+    // Handle different event types
+    if (event === 'invoice.paid' || event === 'qr.payment') {
+      let paymentId, paymentStatus, paymentAmount, paymentDate, referenceId;
 
-    if (error) {
-      console.error('❌ Error processing webhook:', error);
-      return res.status(500).json({ error: 'Failed to process webhook' });
+      if (event === 'invoice.paid') {
+        // Invoice payment event
+        paymentId = data.id;
+        paymentStatus = data.status;
+        paymentAmount = data.paid_amount || data.amount;
+        paymentDate = data.paid_at || data.created;
+        referenceId = data.external_id;
+      } else if (event === 'qr.payment') {
+        // QR payment event
+        paymentId = data.id;
+        paymentStatus = data.status;
+        paymentAmount = data.amount;
+        paymentDate = data.created;
+        referenceId = data.reference_id;
+      }
+
+      console.log('💰 Processing payment:', {
+        event,
+        payment_id: paymentId,
+        status: paymentStatus,
+        amount: paymentAmount,
+        date: paymentDate,
+        reference_id: referenceId
+      });
+
+      // Process the webhook using Supabase function
+      const { data: result, error } = await supabaseAdmin.rpc('process_xendit_webhook', {
+        invoice_id: paymentId,
+        payment_status: paymentStatus,
+        paid_amount: paymentAmount,
+        paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString()
+      });
+
+      if (error) {
+        console.error('❌ Error processing webhook:', error);
+        return res.status(500).json({ error: 'Failed to process webhook' });
+      }
+
+      console.log('✅ Webhook processed successfully');
+      res.status(200).json({ success: true, event, payment_id: paymentId });
+    } else {
+      console.log('⚠️ Unhandled event type:', event);
+      res.status(200).json({ success: true, message: 'Event ignored' });
     }
-
-    console.log('✅ Webhook processed successfully');
-    res.status(200).json({ success: true });
 
   } catch (error) {
     console.error('❌ Webhook error:', error);
