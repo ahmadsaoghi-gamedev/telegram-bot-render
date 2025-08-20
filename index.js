@@ -264,30 +264,62 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
   try {
     const { telegramId, packageId, userData } = req.body;
 
-    // Validate request
+    // Enhanced validation
     if (!telegramId || !packageId || !userData) {
+      console.log('❌ Missing required parameters:', { telegramId: !!telegramId, packageId: !!packageId, userData: !!userData });
       return res.status(400).json({
         success: false,
-        error: 'Missing required parameters'
+        error: 'Missing required parameters: telegramId, packageId, and userData are required'
       });
     }
 
-    // Get VIP package from database
+    console.log('🔍 Looking for VIP package:', packageId);
+
+    // Get VIP package from database with better error handling
     const { data: vipPackage, error: packageError } = await supabaseAdmin
       .from('vip_packages')
       .select('*')
       .eq('id', packageId)
-      .single();
+      .eq('is_active', true) // Make sure package is active
+      .maybeSingle();
 
-    if (packageError || !vipPackage) {
-      return res.status(404).json({
+    console.log('📦 VIP package query result:', { vipPackage, packageError });
+
+    if (packageError) {
+      console.error('❌ Database error fetching VIP package:', packageError);
+      return res.status(500).json({
         success: false,
-        error: 'VIP package not found'
+        error: 'Database error while fetching VIP package',
+        details: packageError.message
       });
     }
 
-    // Generate external ID
-    const externalId = `VIP-${telegramId}-${packageId}-${Date.now()}`;
+    if (!vipPackage) {
+      console.error('❌ VIP package not found:', packageId);
+
+      // Debug: List all available packages
+      const { data: allPackages, error: allPackagesError } = await supabaseAdmin
+        .from('vip_packages')
+        .select('id, name, is_active')
+        .order('created_at', { ascending: false });
+
+      console.log('📋 Available VIP packages:', allPackages);
+
+      return res.status(404).json({
+        success: false,
+        error: 'VIP package not found',
+        requestedPackageId: packageId,
+        availablePackages: allPackages?.map(p => ({ id: p.id, name: p.name, active: p.is_active })) || []
+      });
+    }
+
+    console.log('✅ VIP package found:', vipPackage.name, 'Price:', vipPackage.price);
+
+    // Generate external ID with proper format
+    const timestamp = Date.now();
+    const externalId = `VIP-${telegramId}-${packageId}-${timestamp}`;
+
+    console.log('🏷️ Generated external_id:', externalId);
 
     // Prepare Xendit invoice request
     const invoiceRequest = {
@@ -308,17 +340,19 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
       payment_methods: ['BCA', 'BNI', 'BRI', 'MANDIRI', 'OVO', 'DANA', 'LINKAJA', 'SHOPEEPAY', 'GOPAY', 'QRIS'],
       should_send_email: false,
       customer: {
-        given_names: userData.firstName,
-        email: userData.email,
-        mobile_number: userData.phone
+        given_names: userData.firstName || userData.first_name || 'Unknown',
+        email: userData.email || `${telegramId}@telegram.user`,
+        mobile_number: userData.phone || userData.mobile_number || '+628123456789'
       }
     };
+
+    console.log('📨 Creating Xendit invoice with request:', JSON.stringify(invoiceRequest, null, 2));
 
     // Get Xendit API headers
     const getXenditHeaders = () => ({
       'Authorization': `Basic ${Buffer.from(process.env.XENDIT_SECRET_KEY + ':').toString('base64')}`,
       'Content-Type': 'application/json',
-      'X-IDEMPOTENCY-KEY': `xendit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      'X-IDEMPOTENCY-KEY': `xendit-${timestamp}-${Math.random().toString(36).substr(2, 9)}`
     });
 
     // Create Xendit invoice
@@ -328,41 +362,61 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
       body: JSON.stringify(invoiceRequest)
     });
 
+    const responseText = await response.text();
+    console.log('📨 Xendit API response status:', response.status);
+    console.log('📨 Xendit API response:', responseText);
+
     if (!response.ok) {
-      const errorData = await response.json();
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch {
+        errorData = { message: responseText };
+      }
+
       console.error('❌ Xendit API Error:', errorData);
       return res.status(400).json({
         success: false,
-        error: `Payment gateway error: ${errorData.message || 'Unknown error'}`
+        error: `Payment gateway error: ${errorData.message || 'Unknown error'}`,
+        details: errorData
       });
     }
 
-    const invoice = await response.json();
+    const invoice = JSON.parse(responseText);
+    console.log('✅ Xendit invoice created:', invoice.id);
 
-    // Save transaction to database
+    // Get user profile for database transaction
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('telegram_id', telegramId)
-      .single();
+      .maybeSingle();
 
     let transaction = null;
     if (profileError) {
+      console.error('❌ Profile error:', profileError);
+    } else if (!profile) {
       console.error('❌ Profile not found for telegram_id:', telegramId);
-      console.error('Profile error:', profileError);
-    } else if (profile) {
-      const { data: transactionData, error: transactionError } = await supabaseAdmin
+    } else {
+      // Save transaction to database
+      const transactionData = {
+        user_id: profile.id,
+        telegram_id: telegramId,
+        package_id: packageId,
+        xendit_invoice_id: invoice.id,
+        external_id: externalId,
+        amount: vipPackage.price,
+        status: 'pending',
+        expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('💾 Saving transaction:', transactionData);
+
+      const { data: transactionResult, error: transactionError } = await supabaseAdmin
         .from('payment_transactions')
-        .insert({
-          user_id: profile.id,
-          telegram_id: telegramId,
-          package_id: packageId,
-          xendit_invoice_id: invoice.id,
-          external_id: externalId,  // Add the missing external_id
-          amount: vipPackage.price,
-          status: 'pending',
-          expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString()
-        })
+        .insert(transactionData)
         .select()
         .single();
 
@@ -370,25 +424,32 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
         console.error('❌ Error saving transaction:', transactionError);
         // Continue anyway, don't fail the request
       } else {
-        transaction = transactionData;
+        transaction = transactionResult;
         console.log('✅ Transaction saved:', transaction.id);
       }
-    } else {
-      console.error('❌ Profile not found for telegram_id:', telegramId);
     }
 
-    console.log('✅ Xendit invoice created:', invoice.id);
+    console.log('✅ Invoice creation completed successfully');
     res.json({
       success: true,
       invoice,
-      transaction: transaction
+      transaction,
+      externalId,
+      packageInfo: {
+        id: vipPackage.id,
+        name: vipPackage.name,
+        price: vipPackage.price,
+        duration_days: vipPackage.duration_days
+      }
     });
 
   } catch (error) {
     console.error('❌ Error creating Xendit invoice:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -440,22 +501,34 @@ app.get('/api/vip-packages', async (req, res) => {
       .eq('is_active', true)
       .order('sort_order', { ascending: true });
 
+    console.log('📦 VIP packages query result:', {
+      packagesCount: packages?.length || 0,
+      error: error?.message || null,
+      packages: packages?.map(p => ({ id: p.id, name: p.name, price: p.price })) || []
+    });
+
     if (error) {
       console.error('❌ Error fetching VIP packages:', error);
       return res.status(500).json({
         success: false,
-        error: 'Failed to fetch VIP packages'
+        error: 'Failed to fetch VIP packages',
+        details: error.message
       });
     }
 
     console.log(`✅ Found ${packages?.length || 0} VIP packages`);
-    res.json({ success: true, packages: packages || [] });
+    res.json({
+      success: true,
+      packages: packages || [],
+      count: packages?.length || 0
+    });
 
   } catch (error) {
     console.error('❌ Error in VIP packages endpoint:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
+      details: error.message
     });
   }
 });
