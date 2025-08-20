@@ -182,6 +182,38 @@ app.get('/api/payment/:paymentId', async (req, res) => {
       error = error2;
     }
 
+    // If still not found, try to find by parsing external_id format
+    if (error && error.code === 'PGRST116') {
+      console.log('🔍 Not found by external_id, trying to parse external_id format...');
+      
+      // Parse external_id format: VIP-{telegramId}-{packageId}-{timestamp}
+      if (paymentId.startsWith('VIP-')) {
+        const parts = paymentId.split('-');
+        if (parts.length >= 4) {
+          const telegramId = parts[1];
+          const packageId = parts[2] + '-' + parts[3] + '-' + parts[4] + '-' + parts[5] + '-' + parts[6];
+          
+          console.log(`🔍 Parsed external_id: telegram_id=${telegramId}, package_id=${packageId}`);
+          
+          const { data: data3, error: error3 } = await supabaseAdmin
+            .from('payment_transactions')
+            .select(`
+              *,
+              vip_packages(name, duration_days),
+              profiles(telegram_id, is_vip, vip_expires_at)
+            `)
+            .eq('telegram_id', telegramId)
+            .eq('package_id', packageId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          data = data3;
+          error = error3;
+        }
+      }
+    }
+
     console.log('🔍 Payment status check result:', { paymentId, data, error });
 
     if (error) {
