@@ -245,8 +245,8 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
           package_id: packageId,  // Changed from vip_package_id to package_id
           xendit_invoice_id: invoice.id,
           amount: vipPackage.price,
-          status: 'PENDING',
-          external_id: externalId
+          status: 'PENDING'
+          // Removed external_id as column doesn't exist
         })
         .select()
         .single();
