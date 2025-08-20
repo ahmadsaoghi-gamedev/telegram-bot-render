@@ -148,22 +148,41 @@ app.post('/api/xendit/webhook', async (req, res) => {
 });
 
 // Payment status check endpoint
-app.get('/api/payment/:invoiceId', async (req, res) => {
+app.get('/api/payment/:paymentId', async (req, res) => {
   try {
-    const { invoiceId } = req.params;
+    const { paymentId } = req.params;
 
-    // Check payment status in database
-    const { data, error } = await supabaseAdmin
+    console.log('🔍 Checking payment status for ID:', paymentId);
+
+    // Check payment status in database - try multiple fields
+    let { data, error } = await supabaseAdmin
       .from('payment_transactions')
       .select(`
         *,
         vip_packages(name, duration_days),
         profiles(telegram_id, is_vip, vip_expires_at)
       `)
-      .eq('xendit_invoice_id', invoiceId)
+      .eq('xendit_invoice_id', paymentId)
       .single();
 
-    console.log('🔍 Payment status check:', { invoiceId, data, error });
+    // If not found by xendit_invoice_id, try external_id
+    if (error && error.code === 'PGRST116') {
+      console.log('🔍 Not found by xendit_invoice_id, trying external_id...');
+      const { data: data2, error: error2 } = await supabaseAdmin
+        .from('payment_transactions')
+        .select(`
+          *,
+          vip_packages(name, duration_days),
+          profiles(telegram_id, is_vip, vip_expires_at)
+        `)
+        .eq('external_id', paymentId)
+        .single();
+
+      data = data2;
+      error = error2;
+    }
+
+    console.log('🔍 Payment status check result:', { paymentId, data, error });
 
     if (error) {
       return res.status(404).json({ error: 'Payment not found' });
