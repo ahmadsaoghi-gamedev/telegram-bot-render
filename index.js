@@ -249,7 +249,8 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
           package_id: packageId,    // Now we know this column exists
           xendit_invoice_id: invoice.id,
           amount: vipPackage.price,
-          status: 'PENDING'
+          status: 'PENDING',
+          expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString() // Add expires_at
           // Based on error message, we know these columns exist
         })
         .select()
