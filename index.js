@@ -137,6 +137,8 @@ app.get('/api/payment/:invoiceId', async (req, res) => {
       .eq('xendit_invoice_id', invoiceId)
       .single();
 
+    console.log('🔍 Payment status check:', { invoiceId, data, error });
+
     if (error) {
       return res.status(404).json({ error: 'Payment not found' });
     }
