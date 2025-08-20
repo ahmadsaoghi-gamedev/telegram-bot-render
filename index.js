@@ -156,8 +156,11 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 
     console.log('🔍 Checking payment status for ID:', paymentId);
 
-    // Check payment status in database - try multiple fields
-    let { data, error } = await supabaseAdmin
+    let data = null;
+    let error = null;
+
+    // Method 1: Try to find by xendit_invoice_id first
+    const { data: data1, error: error1 } = await supabaseAdmin
       .from('payment_transactions')
       .select(`
         *,
@@ -165,10 +168,13 @@ app.get('/api/payment/:paymentId', async (req, res) => {
         profiles(telegram_id, is_vip, vip_expires_at)
       `)
       .eq('xendit_invoice_id', paymentId)
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to avoid errors
 
-    // If not found by xendit_invoice_id, try external_id
-    if (error && error.code === 'PGRST116') {
+    if (data1) {
+      data = data1;
+      console.log('✅ Found by xendit_invoice_id');
+    } else {
+      // Method 2: Try to find by external_id
       console.log('🔍 Not found by xendit_invoice_id, trying external_id...');
       const { data: data2, error: error2 } = await supabaseAdmin
         .from('payment_transactions')
@@ -178,55 +184,78 @@ app.get('/api/payment/:paymentId', async (req, res) => {
           profiles(telegram_id, is_vip, vip_expires_at)
         `)
         .eq('external_id', paymentId)
-        .single();
+        .maybeSingle();
 
-      data = data2;
-      error = error2;
-    }
+      if (data2) {
+        data = data2;
+        console.log('✅ Found by external_id');
+      } else {
+        // Method 3: Parse external_id if it follows VIP format
+        console.log('🔍 Not found by external_id, trying to parse VIP format...');
 
-    // If still not found, try to find by parsing external_id format
-    if (error && error.code === 'PGRST116') {
-      console.log('🔍 Not found by external_id, trying to parse external_id format...');
+        if (paymentId.startsWith('VIP-')) {
+          const parts = paymentId.split('-');
+          console.log('🔍 Parsing parts:', parts);
 
-      // Parse external_id format: VIP-{telegramId}-{packageId}-{timestamp}
-      if (paymentId.startsWith('VIP-')) {
-        const parts = paymentId.split('-');
-        if (parts.length >= 7) {
-          const telegramId = parts[1];
-          const packageId = parts[2] + '-' + parts[3] + '-' + parts[4] + '-' + parts[5] + '-' + parts[6];
+          // Expected format: VIP-{telegramId}-{uuid-part1}-{uuid-part2}-{uuid-part3}-{uuid-part4}-{uuid-part5}-{timestamp}
+          // So parts should be: ['VIP', telegramId, uuid1, uuid2, uuid3, uuid4, uuid5, timestamp]
+          if (parts.length >= 7) {
+            const telegramId = parts[1];
+            // Reconstruct the UUID from parts 2-6 (5 parts total)
+            const packageId = parts.slice(2, 7).join('-');
+            const timestamp = parts[7]; // Optional timestamp part
 
-          console.log(`🔍 Parsed external_id: telegram_id=${telegramId}, package_id=${packageId}`);
+            console.log(`🔍 Parsed: telegram_id=${telegramId}, package_id=${packageId}, timestamp=${timestamp}`);
 
-          const { data: data3, error: error3 } = await supabaseAdmin
-            .from('payment_transactions')
-            .select(`
-              *,
-              vip_packages(name, duration_days),
-              profiles(telegram_id, is_vip, vip_expires_at)
-            `)
-            .eq('telegram_id', telegramId)
-            .eq('package_id', packageId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+            // Try to find by telegram_id and package_id
+            const { data: data3, error: error3 } = await supabaseAdmin
+              .from('payment_transactions')
+              .select(`
+                *,
+                vip_packages(name, duration_days),
+                profiles(telegram_id, is_vip, vip_expires_at)
+              `)
+              .eq('telegram_id', telegramId)
+              .eq('package_id', packageId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
 
-          data = data3;
-          error = error3;
+            if (data3) {
+              data = data3;
+              console.log('✅ Found by telegram_id and package_id');
+            } else {
+              console.log('❌ Not found by any method');
+              error = { code: 'PGRST116', message: 'Payment not found' };
+            }
+          } else {
+            console.log('❌ Invalid VIP external_id format');
+            error = { code: 'INVALID_FORMAT', message: 'Invalid external_id format' };
+          }
+        } else {
+          console.log('❌ Not a VIP format external_id');
+          error = { code: 'INVALID_FORMAT', message: 'Invalid external_id format' };
         }
       }
     }
 
-    console.log('🔍 Payment status check result:', { paymentId, data, error });
+    console.log('🔍 Payment status check result:', { paymentId, found: !!data, error });
 
-    if (error) {
-      return res.status(404).json({ error: 'Payment not found' });
+    if (error || !data) {
+      return res.status(404).json({
+        error: 'Payment not found',
+        details: error?.message || 'No matching payment record found'
+      });
     }
 
     res.json({ success: true, payment: data });
 
   } catch (error) {
-    console.error('Error checking payment:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Error checking payment:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      details: error.message
+    });
   }
 });
 
