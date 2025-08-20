@@ -230,23 +230,26 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
     const invoice = await response.json();
 
     // Save transaction to database
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('telegram_id', telegramId)
       .single();
 
     let transaction = null;
-    if (profile) {
+    if (profileError) {
+      console.error('❌ Profile not found for telegram_id:', telegramId);
+      console.error('Profile error:', profileError);
+    } else if (profile) {
       const { data: transactionData, error: transactionError } = await supabaseAdmin
         .from('payment_transactions')
         .insert({
           user_id: profile.id,
-          package_id: packageId,  // Changed from vip_package_id to package_id
+          package_id: packageId,  // Now we know this column exists
           xendit_invoice_id: invoice.id,
           amount: vipPackage.price,
           status: 'PENDING'
-          // Removed external_id as column doesn't exist
+          // Based on error message, we know these columns exist
         })
         .select()
         .single();
@@ -258,6 +261,8 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
         transaction = transactionData;
         console.log('✅ Transaction saved:', transaction.id);
       }
+    } else {
+      console.error('❌ Profile not found for telegram_id:', telegramId);
     }
 
     console.log('✅ Xendit invoice created:', invoice.id);
