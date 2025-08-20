@@ -326,13 +326,13 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
         .from('payment_transactions')
         .insert({
           user_id: profile.id,
-          telegram_id: telegramId,  // Add the missing telegram_id column
-          package_id: packageId,    // Now we know this column exists
+          telegram_id: telegramId,
+          package_id: packageId,
           xendit_invoice_id: invoice.id,
+          external_id: externalId,  // Add the missing external_id
           amount: vipPackage.price,
           status: 'pending',
-          expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString() // Add expires_at
-          // Based on error message, we know these columns exist
+          expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString()
         })
         .select()
         .single();
