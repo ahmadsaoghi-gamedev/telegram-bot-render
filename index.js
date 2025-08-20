@@ -11,11 +11,13 @@ const app = express();
 app.use(express.json());
 app.use(cors({
   origin: [
-    'https://testelegramwebapp-main.vercel.app/',
+    'https://testelegramwebapp-main.vercel.app',
     'http://localhost:5173',
     'http://localhost:3000'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Xendit-Signature']
 }));
 
 // Import video proxy routers
@@ -189,7 +191,7 @@ app.get('/api/payment/:paymentId', async (req, res) => {
       // Parse external_id format: VIP-{telegramId}-{packageId}-{timestamp}
       if (paymentId.startsWith('VIP-')) {
         const parts = paymentId.split('-');
-        if (parts.length >= 4) {
+        if (parts.length >= 7) {
           const telegramId = parts[1];
           const packageId = parts[2] + '-' + parts[3] + '-' + parts[4] + '-' + parts[5] + '-' + parts[6];
 
