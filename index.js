@@ -237,20 +237,33 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
       .single();
 
     if (profile) {
-      await supabaseAdmin
+      const { data: transaction, error: transactionError } = await supabaseAdmin
         .from('payment_transactions')
         .insert({
           user_id: profile.id,
-          vip_package_id: packageId,
+          package_id: packageId,  // Changed from vip_package_id to package_id
           xendit_invoice_id: invoice.id,
           amount: vipPackage.price,
           status: 'PENDING',
           external_id: externalId
-        });
+        })
+        .select()
+        .single();
+
+      if (transactionError) {
+        console.error('❌ Error saving transaction:', transactionError);
+        // Continue anyway, don't fail the request
+      } else {
+        console.log('✅ Transaction saved:', transaction.id);
+      }
     }
 
     console.log('✅ Xendit invoice created:', invoice.id);
-    res.json({ success: true, invoice });
+    res.json({
+      success: true,
+      invoice,
+      transaction: transaction || null
+    });
 
   } catch (error) {
     console.error('❌ Error creating Xendit invoice:', error);
