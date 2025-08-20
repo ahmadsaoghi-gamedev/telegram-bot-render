@@ -1,8 +1,29 @@
-// Railway Xendit API Endpoints - Secure backend for Xendit operations
+// Railway index.js - Updated with Xendit Integration
+require('dotenv').config();
 const express = require('express');
+const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
+const cors = require('cors');
 
-// Xendit API Configuration (Server-side only)
+const app = express();
+app.use(express.json());
+app.use(cors({
+    origin: [
+        'https://testelegramwebapp-main.vercel.app',
+        'http://localhost:5173',
+        'http://localhost:3000'
+    ],
+    credentials: true
+}));
+
+// Supabase client
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Xendit API Configuration
 const XENDIT_CONFIG = {
     apiKey: process.env.XENDIT_SECRET_KEY,
     baseUrl: 'https://api.xendit.co',
@@ -16,6 +37,115 @@ const getXenditHeaders = () => ({
     'Authorization': `Basic ${Buffer.from(XENDIT_CONFIG.apiKey + ':').toString('base64')}`,
     'Content-Type': 'application/json',
     'X-IDEMPOTENCY-KEY': `xendit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+});
+
+// Xendit webhook signature verification
+const verifyWebhookSignature = (payload, signature, secret) => {
+    if (!secret) return true; // Skip verification if no secret
+    const expectedSignature = crypto
+        .createHmac('sha256', secret)
+        .update(payload)
+        .digest('hex');
+    return signature === expectedSignature;
+};
+
+// Root endpoint - Status check
+app.get('/', (req, res) => {
+    res.json({
+        status: 'OK',
+        message: 'SHReels Telegram Bot API with Xendit Integration is running',
+        timestamp: new Date().toISOString(),
+        version: '2.1.0',
+        endpoints: [
+            'GET / - Status check',
+            'POST /webhook - Telegram webhook',
+            'GET /api/health - Health check',
+            'POST /api/xendit/webhook - Xendit webhook',
+            'GET /api/payment/:invoiceId - Payment status',
+            'POST /api/xendit/create-invoice - Create invoice'
+        ]
+    });
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        services: {
+            supabase: 'connected',
+            xendit: XENDIT_CONFIG.apiKey ? 'configured' : 'not_configured'
+        }
+    });
+});
+
+// Xendit webhook endpoint
+app.post('/api/xendit/webhook', async (req, res) => {
+    try {
+        const payload = JSON.stringify(req.body);
+        const signature = req.headers['x-xendit-signature'];
+
+        console.log('📦 Xendit webhook received:', {
+            id: req.body.id,
+            external_id: req.body.external_id,
+            status: req.body.status,
+            amount: req.body.amount
+        });
+
+        // Verify webhook signature (optional but recommended)
+        if (process.env.WEBHOOK_SECRET) {
+            if (!verifyWebhookSignature(payload, signature, process.env.WEBHOOK_SECRET)) {
+                console.error('❌ Invalid webhook signature');
+                return res.status(401).json({ error: 'Invalid signature' });
+            }
+        }
+
+        const { id, external_id, status, amount, paid_amount, paid_at } = req.body;
+
+        // Process the webhook using Supabase function
+        const { data, error } = await supabase.rpc('process_xendit_webhook', {
+            invoice_id: id,
+            payment_status: status,
+            paid_amount: paid_amount || amount,
+            paid_at: paid_at ? new Date(paid_at).toISOString() : new Date().toISOString()
+        });
+
+        if (error) {
+            console.error('❌ Webhook processing error:', error);
+            return res.status(500).json({ error: 'Webhook processing failed' });
+        }
+
+        console.log('✅ Webhook processed successfully');
+        res.status(200).json({ success: true });
+
+    } catch (error) {
+        console.error('❌ Webhook error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Payment status check endpoint
+app.get('/api/payment/:invoiceId', async (req, res) => {
+    try {
+        const { invoiceId } = req.params;
+
+        const { data, error } = await supabase
+            .from('payment_transactions')
+            .select(`*, vip_packages(name, duration_days), profiles(telegram_id, is_vip, vip_expires_at)`)
+            .eq('xendit_invoice_id', invoiceId)
+            .single();
+
+        if (error) {
+            console.error('❌ Payment status check error:', error);
+            return res.status(404).json({ error: 'Payment not found' });
+        }
+
+        res.json({ success: true, payment: data });
+
+    } catch (error) {
+        console.error('❌ Payment status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // Create Xendit invoice endpoint
@@ -82,7 +212,7 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
 
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('Xendit API Error:', errorData);
+            console.error('❌ Xendit API Error:', errorData);
             return res.status(400).json({
                 success: false,
                 error: `Payment gateway error: ${errorData.message || 'Unknown error'}`
@@ -153,4 +283,28 @@ app.get('/api/xendit/invoice/:invoiceId', async (req, res) => {
     }
 });
 
-module.exports = { app };
+// Telegram webhook endpoint (existing)
+app.post('/webhook', async (req, res) => {
+    try {
+        const { message } = req.body;
+
+        if (message) {
+            console.log('📱 Telegram message received:', message.text);
+            // Handle Telegram message here
+        }
+
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('❌ Telegram webhook error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🚀 SHReels Telegram Bot with Xendit Integration running on port ${PORT}`);
+    console.log(`📦 Xendit configured: ${XENDIT_CONFIG.apiKey ? 'Yes' : 'No'}`);
+    console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+});
+
+module.exports = app;
