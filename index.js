@@ -236,8 +236,9 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
       .eq('telegram_id', telegramId)
       .single();
 
+    let transaction = null;
     if (profile) {
-      const { data: transaction, error: transactionError } = await supabaseAdmin
+      const { data: transactionData, error: transactionError } = await supabaseAdmin
         .from('payment_transactions')
         .insert({
           user_id: profile.id,
@@ -254,6 +255,7 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
         console.error('❌ Error saving transaction:', transactionError);
         // Continue anyway, don't fail the request
       } else {
+        transaction = transactionData;
         console.log('✅ Transaction saved:', transaction.id);
       }
     }
@@ -262,7 +264,7 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
     res.json({
       success: true,
       invoice,
-      transaction: transaction || null
+      transaction: transaction
     });
 
   } catch (error) {
