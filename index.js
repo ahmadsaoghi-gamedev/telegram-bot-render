@@ -245,7 +245,8 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
         .from('payment_transactions')
         .insert({
           user_id: profile.id,
-          package_id: packageId,  // Now we know this column exists
+          telegram_id: telegramId,  // Add the missing telegram_id column
+          package_id: packageId,    // Now we know this column exists
           xendit_invoice_id: invoice.id,
           amount: vipPackage.price,
           status: 'PENDING'
