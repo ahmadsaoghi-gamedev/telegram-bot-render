@@ -240,8 +240,8 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
           reference_id: packageId
         }
       ],
-      success_redirect_url: `${process.env.FRONTEND_URL || 'https://testelegramwebapp-main.vercel.app'}/payment/success?invoice_id={invoice_id}`,
-      failure_redirect_url: `${process.env.FRONTEND_URL || 'https://testelegramwebapp-main.vercel.app'}/payment/failed?invoice_id={invoice_id}`,
+      success_redirect_url: `${process.env.FRONTEND_URL || 'https://testelegramwebapp-main.vercel.app'}/payment/success?invoice_id=${externalId}`,
+      failure_redirect_url: `${process.env.FRONTEND_URL || 'https://testelegramwebapp-main.vercel.app'}/payment/failed?invoice_id=${externalId}`,
       payment_methods: ['BCA', 'BNI', 'BRI', 'MANDIRI', 'OVO', 'DANA', 'LINKAJA', 'SHOPEEPAY', 'GOPAY', 'QRIS'],
       should_send_email: false,
       customer: {
@@ -1012,6 +1012,7 @@ app.get('/', (req, res) => {
       "POST /api/xendit/create-invoice - Create Xendit invoice",
       "GET /api/xendit/invoice/:invoiceId - Get Xendit invoice",
       "GET /api/payment/:invoiceId - Check payment status",
+      "GET /api/vip-packages - Get VIP packages",
       // Video proxy endpoints
       "GET /api/proxy-video/healthz - Video proxy health check",
       "GET /api/proxy-video/stream - Secure video streaming proxy",
