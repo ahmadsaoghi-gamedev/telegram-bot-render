@@ -366,6 +366,37 @@ app.get('/api/xendit/invoice/:invoiceId', async (req, res) => {
   }
 });
 
+// Get VIP packages endpoint
+app.get('/api/vip-packages', async (req, res) => {
+  try {
+    console.log('📦 Fetching VIP packages from database...');
+
+    const { data: packages, error } = await supabaseAdmin
+      .from('vip_packages')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching VIP packages:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch VIP packages'
+      });
+    }
+
+    console.log(`✅ Found ${packages?.length || 0} VIP packages`);
+    res.json({ success: true, packages: packages || [] });
+
+  } catch (error) {
+    console.error('❌ Error in VIP packages endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
 // ========================================
 // EXISTING BOT FUNCTIONALITY
 // ========================================
