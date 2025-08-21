@@ -700,6 +700,115 @@ app.post('/api/manual-payment-process', async (req, res) => {
   }
 });
 
+// Manual transaction creation endpoint (for successful payments that weren't saved)
+app.post('/api/manual-create-transaction', async (req, res) => {
+  try {
+    const { telegramId, packageId, xenditInvoiceId, externalId, amount, paymentMethod } = req.body;
+
+    console.log('🔧 Manual transaction creation:', {
+      telegramId,
+      packageId,
+      xenditInvoiceId,
+      externalId,
+      amount,
+      paymentMethod
+    });
+
+    // Get user profile
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('telegram_id', telegramId)
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(404).json({ error: 'User profile not found' });
+    }
+
+    // Get VIP package details
+    const { data: vipPackage, error: packageError } = await supabaseAdmin
+      .from('vip_packages')
+      .select('*')
+      .eq('id', packageId)
+      .single();
+
+    if (packageError || !vipPackage) {
+      return res.status(404).json({ error: 'VIP package not found' });
+    }
+
+    // Create transaction data
+    const transactionData = {
+      user_id: profile.id,
+      telegram_id: telegramId,
+      package_id: packageId,
+      xendit_invoice_id: xenditInvoiceId,
+      external_id: externalId,
+      amount: amount,
+      status: 'paid',
+      payment_method: paymentMethod,
+      paid_amount: amount,
+      paid_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    console.log('💾 Creating transaction:', transactionData);
+
+    // Save transaction to database
+    const { data: transaction, error: transactionError } = await supabaseAdmin
+      .from('payment_transactions')
+      .insert(transactionData)
+      .select()
+      .single();
+
+    if (transactionError) {
+      console.error('❌ Error creating transaction:', transactionError);
+      return res.status(500).json({ error: 'Failed to create transaction' });
+    }
+
+    console.log('✅ Transaction created:', transaction.id);
+
+    // Activate VIP for user
+    let newVipExpiresAt;
+    if (profile.is_vip && profile.vip_expires_at > new Date()) {
+      newVipExpiresAt = new Date(profile.vip_expires_at);
+      newVipExpiresAt.setDate(newVipExpiresAt.getDate() + vipPackage.duration_days);
+    } else {
+      newVipExpiresAt = new Date();
+      newVipExpiresAt.setDate(newVipExpiresAt.getDate() + vipPackage.duration_days);
+    }
+
+    // Update user VIP status
+    const { error: vipError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        is_vip: true,
+        vip_expires_at: newVipExpiresAt.toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', profile.id);
+
+    if (vipError) {
+      console.error('❌ Error updating VIP status:', vipError);
+      return res.status(500).json({ error: 'Failed to update VIP status' });
+    }
+
+    console.log('✅ VIP activated for user:', telegramId);
+
+    res.json({
+      success: true,
+      message: 'Transaction created and VIP activated successfully',
+      transaction: transaction,
+      vip_expires_at: newVipExpiresAt
+    });
+
+  } catch (error) {
+    console.error('❌ Manual transaction creation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ========================================
 // EXISTING BOT FUNCTIONALITY
 // ========================================
