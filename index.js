@@ -481,12 +481,11 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
         telegram_id: telegramId,
         package_id: packageId,
         xendit_invoice_id: invoice.id,
-        external_id: externalId,
         amount: vipPackage.price,
         status: 'pending',
+        payment_method: paymentMethod || 'QRIS',
         expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        created_at: new Date().toISOString()
       };
 
       console.log('💾 Saving transaction:', transactionData);
