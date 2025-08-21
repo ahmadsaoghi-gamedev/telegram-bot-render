@@ -183,17 +183,10 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 
         if (parts.length >= 7) {
           const telegramId = parts[1];
-          let packageId;
+          // Reconstruct the UUID from parts 2-6 (5 parts total)
+          const packageId = parts.slice(2, 7).join('-');
+          const timestamp = parts[7]; // Optional timestamp part
 
-          if (parts.length === 8) {
-            packageId = parts.slice(2, 7).join('-');
-          } else if (parts.length === 7) {
-            packageId = parts.slice(2, 7).join('-');
-          } else {
-            packageId = parts.slice(2, -1).join('-');
-          }
-
-          const timestamp = parts[parts.length - 1];
           console.log(`🔍 Parsed: telegram_id=${telegramId}, package_id=${packageId}, timestamp=${timestamp}`);
 
           // Try to find by telegram_id and package_id
@@ -498,6 +491,148 @@ app.get('/api/xendit/invoice/:invoiceId', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Internal server error'
+    });
+  }
+});
+
+// Manual payment process endpoint
+app.post('/api/manual-payment-process', async (req, res) => {
+  try {
+    const { external_id, payment_status = 'paid', paid_amount, paid_at } = req.body;
+
+    if (!external_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'external_id is required'
+      });
+    }
+
+    console.log('🔧 Manual payment process:', { external_id, payment_status, paid_amount, paid_at });
+
+    // Process the payment using Supabase function
+    const { data: result, error } = await supabaseAdmin.rpc('process_xendit_webhook', {
+      invoice_id: external_id,
+      payment_status: payment_status,
+      paid_amount: paid_amount || 0,
+      paid_at: paid_at ? new Date(paid_at).toISOString() : new Date().toISOString()
+    });
+
+    if (error) {
+      console.error('❌ Error processing manual payment:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to process payment',
+        details: error.message
+      });
+    }
+
+    console.log('✅ Manual payment processed successfully');
+    res.json({
+      success: true,
+      message: 'Payment processed successfully',
+      external_id,
+      payment_status
+    });
+
+  } catch (error) {
+    console.error('❌ Error in manual payment process:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: error.message
+    });
+  }
+});
+
+// Manual create transaction endpoint
+app.post('/api/manual-create-transaction', async (req, res) => {
+  try {
+    const { telegram_id, package_id, amount, external_id } = req.body;
+
+    if (!telegram_id || !package_id || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'telegram_id, package_id, and amount are required'
+      });
+    }
+
+    console.log('🔧 Manual create transaction:', { telegram_id, package_id, amount, external_id });
+
+    // Get user profile
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('telegram_id', parseInt(telegram_id))
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      console.error('❌ Profile not found for telegram_id:', telegram_id);
+      return res.status(404).json({
+        success: false,
+        error: 'User profile not found'
+      });
+    }
+
+    // Get VIP package
+    const { data: vipPackage, error: packageError } = await supabaseAdmin
+      .from('vip_packages')
+      .select('*')
+      .eq('id', package_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (packageError || !vipPackage) {
+      console.error('❌ VIP package not found:', package_id);
+      return res.status(404).json({
+        success: false,
+        error: 'VIP package not found'
+      });
+    }
+
+    // Create transaction
+    const transactionData = {
+      user_id: profile.id,
+      telegram_id: parseInt(telegram_id),
+      package_id: package_id,
+      xendit_invoice_id: external_id || `manual-${Date.now()}`,
+      external_id: external_id || `VIP-${telegram_id}-${package_id}-${Date.now()}`,
+      amount: amount,
+      status: 'pending',
+      expires_at: new Date(Date.now() + (vipPackage.duration_days * 24 * 60 * 60 * 1000)).toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    console.log('💾 Creating manual transaction:', transactionData);
+
+    const { data: transaction, error: transactionError } = await supabaseAdmin
+      .from('payment_transactions')
+      .insert(transactionData)
+      .select()
+      .single();
+
+    if (transactionError) {
+      console.error('❌ Error creating manual transaction:', transactionError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create transaction',
+        details: transactionError.message
+      });
+    }
+
+    console.log('✅ Manual transaction created successfully');
+    res.json({
+      success: true,
+      transaction,
+      message: 'Transaction created successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error in manual create transaction:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: error.message
     });
   }
 });
