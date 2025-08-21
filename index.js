@@ -198,12 +198,24 @@ app.get('/api/payment/:paymentId', async (req, res) => {
           console.log('🔍 Parsing parts:', parts);
 
           // Expected format: VIP-{telegramId}-{uuid-part1}-{uuid-part2}-{uuid-part3}-{uuid-part4}-{uuid-part5}-{timestamp}
-          // So parts should be: ['VIP', telegramId, uuid1, uuid2, uuid3, uuid4, uuid5, timestamp]
+          // Handle different UUID formats
           if (parts.length >= 7) {
             const telegramId = parts[1];
-            // Reconstruct the UUID from parts 2-6 (5 parts total)
-            const packageId = parts.slice(2, 7).join('-');
-            const timestamp = parts[7]; // Optional timestamp part
+
+            // FIXED: Handle UUID with different part counts
+            let packageId;
+            if (parts.length === 8) {
+              // Format: VIP-telegramId-uuid1-uuid2-uuid3-uuid4-uuid5-timestamp
+              packageId = parts.slice(2, 7).join('-');
+            } else if (parts.length === 7) {
+              // Format: VIP-telegramId-uuid1-uuid2-uuid3-uuid4-uuid5 (no timestamp)
+              packageId = parts.slice(2, 7).join('-');
+            } else {
+              // Handle other cases - take all parts except first 2 and last 1
+              packageId = parts.slice(2, -1).join('-');
+            }
+
+            const timestamp = parts[parts.length - 1];
 
             console.log(`🔍 Parsed: telegram_id=${telegramId}, package_id=${packageId}, timestamp=${timestamp}`);
 
@@ -215,7 +227,7 @@ app.get('/api/payment/:paymentId', async (req, res) => {
                 vip_packages(name, duration_days),
                 profiles(telegram_id, is_vip, vip_expires_at)
               `)
-              .eq('telegram_id', telegramId)
+              .eq('telegram_id', parseInt(telegramId))
               .eq('package_id', packageId)
               .order('created_at', { ascending: false })
               .limit(1)
@@ -225,8 +237,48 @@ app.get('/api/payment/:paymentId', async (req, res) => {
               data = data3;
               console.log('✅ Found by telegram_id and package_id');
             } else {
-              console.log('❌ Not found by any method');
-              error = { code: 'PGRST116', message: 'Payment not found' };
+              console.log('❌ Not found by telegram_id and package_id');
+
+              // Additional debug: Check if transaction exists with just telegram_id
+              const { data: recentTransactions } = await supabaseAdmin
+                .from('payment_transactions')
+                .select('id, package_id, external_id, status, created_at')
+                .eq('telegram_id', parseInt(telegramId))
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+              console.log('📝 Recent transactions for this user:', recentTransactions);
+
+              if (recentTransactions && recentTransactions.length > 0) {
+                // Try to find by external_id from recent transactions
+                const matchingTransaction = recentTransactions.find(t =>
+                  t.external_id === paymentId ||
+                  t.external_id === `VIP-${telegramId}-${packageId}-${timestamp}`
+                );
+
+                if (matchingTransaction) {
+                  // Get full transaction data
+                  const { data: fullTransaction } = await supabaseAdmin
+                    .from('payment_transactions')
+                    .select(`
+                      *,
+                      vip_packages(name, duration_days),
+                      profiles(telegram_id, is_vip, vip_expires_at)
+                    `)
+                    .eq('id', matchingTransaction.id)
+                    .single();
+
+                  if (fullTransaction) {
+                    data = fullTransaction;
+                    console.log('✅ Found by external_id from recent transactions');
+                  }
+                }
+              }
+
+              if (!data) {
+                console.log('❌ Not found by any method');
+                error = { code: 'PGRST116', message: 'Payment not found' };
+              }
             }
           } else {
             console.log('❌ Invalid VIP external_id format');
