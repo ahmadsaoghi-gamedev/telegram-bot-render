@@ -533,6 +533,58 @@ app.get('/api/vip-packages', async (req, res) => {
   }
 });
 
+// Get user transactions endpoint
+app.get('/api/user-transactions/:telegramId', async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    console.log('📝 Fetching transactions for user:', telegramId);
+
+    const { data: transactions, error } = await supabaseAdmin
+      .from('payment_transactions')
+      .select(`
+        *,
+        vip_packages(name, price, duration_days)
+      `)
+      .eq('telegram_id', parseInt(telegramId))
+      .order('created_at', { ascending: false });
+
+    console.log('📝 User transactions query result:', {
+      transactionsCount: transactions?.length || 0,
+      error: error?.message || null,
+      transactions: transactions?.map(t => ({
+        id: t.id,
+        amount: t.amount,
+        status: t.status,
+        package_name: t.vip_packages?.name || 'Unknown'
+      })) || []
+    });
+
+    if (error) {
+      console.error('❌ Error fetching user transactions:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch user transactions',
+        details: error.message
+      });
+    }
+
+    console.log(`✅ Found ${transactions?.length || 0} transactions for user ${telegramId}`);
+    res.json({
+      success: true,
+      transactions: transactions || [],
+      count: transactions?.length || 0
+    });
+
+  } catch (error) {
+    console.error('❌ Error in user transactions endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: error.message
+    });
+  }
+});
+
 // ========================================
 // EXISTING BOT FUNCTIONALITY
 // ========================================
