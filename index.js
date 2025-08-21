@@ -596,6 +596,129 @@ app.post('/api/manual-payment-process', async (req, res) => {
   }
 });
 
+// Emergency direct update transaction endpoint
+app.post('/api/emergency-update-transaction', async (req, res) => {
+  try {
+    const { transaction_id, new_status, paid_amount, paid_at, activate_vip } = req.body;
+    if (!transaction_id || !new_status) {
+      return res.status(400).json({ success: false, error: 'transaction_id and new_status are required' });
+    }
+    console.log('🚨 Emergency update transaction:', { transaction_id, new_status, paid_amount, paid_at, activate_vip });
+
+    // Direct database update bypassing function
+    const { data: transaction, error: findError } = await supabaseAdmin
+      .from('payment_transactions')
+      .select('*')
+      .eq('id', transaction_id)
+      .single();
+
+    if (findError || !transaction) {
+      console.error('❌ Transaction not found:', findError);
+      return res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
+
+    // Update transaction directly
+    const { data: updatedTransaction, error: updateError } = await supabaseAdmin
+      .from('payment_transactions')
+      .update({
+        status: new_status.toLowerCase(),
+        paid_amount: paid_amount || transaction.amount,
+        paid_at: paid_at ? new Date(paid_at).toISOString() : new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', transaction_id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('❌ Error updating transaction:', updateError);
+      return res.status(500).json({ success: false, error: 'Failed to update transaction', details: updateError.message });
+    }
+
+    console.log('✅ Transaction updated via emergency method:', updatedTransaction.id);
+
+    // Activate VIP if requested and payment is successful
+    if (activate_vip && new_status.toLowerCase() === 'paid') {
+      await activateUserVIP(transaction.user_id, transaction.package_id);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Transaction updated successfully',
+      transaction_id,
+      new_status,
+      vip_activated: activate_vip && new_status.toLowerCase() === 'paid'
+    });
+  } catch (error) {
+    console.error('❌ Emergency update error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Emergency create paid transaction endpoint
+app.post('/api/emergency-create-paid-transaction', async (req, res) => {
+  try {
+    const { telegram_id, package_id, amount, payment_method, xendit_invoice_id, external_id, status, paid_amount, paid_at } = req.body;
+    if (!telegram_id || !package_id || !amount) {
+      return res.status(400).json({ success: false, error: 'telegram_id, package_id, and amount are required' });
+    }
+    console.log('🚨 Emergency create paid transaction:', { telegram_id, package_id, amount, status });
+
+    // Get user profile
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    if (profileError || !profile) {
+      console.error('❌ User profile not found:', profileError);
+      return res.status(404).json({ success: false, error: 'User profile not found' });
+    }
+
+    // Create transaction directly as paid
+    const { data: newTransaction, error: createError } = await supabaseAdmin
+      .from('payment_transactions')
+      .insert({
+        user_id: profile.id,
+        telegram_id: telegram_id,
+        package_id: package_id,
+        xendit_invoice_id: xendit_invoice_id || `emergency_${Date.now()}`,
+        external_id: external_id || `EMERGENCY-${Date.now()}`,
+        amount: amount,
+        status: status || 'paid',
+        payment_method: payment_method || 'EMERGENCY_FIX',
+        paid_amount: paid_amount || amount,
+        paid_at: paid_at ? new Date(paid_at).toISOString() : new Date().toISOString(),
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days from now
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('❌ Error creating transaction:', createError);
+      return res.status(500).json({ success: false, error: 'Failed to create transaction', details: createError.message });
+    }
+
+    console.log('✅ Emergency transaction created:', newTransaction.id);
+
+    // Activate VIP if payment is successful
+    if (status === 'paid') {
+      await activateUserVIP(profile.id, package_id);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Emergency transaction created successfully',
+      transaction: newTransaction,
+      vip_activated: status === 'paid'
+    });
+  } catch (error) {
+    console.error('❌ Emergency create error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // Manual create transaction endpoint
 app.post('/api/manual-create-transaction', async (req, res) => {
   try {
