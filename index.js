@@ -124,6 +124,13 @@ app.post('/api/xendit/webhook', async (req, res) => {
       });
 
       // Process the webhook using Supabase function
+      console.log('🔧 Processing webhook with parameters:', {
+        invoice_id: paymentId,
+        payment_status: paymentStatus,
+        paid_amount: paymentAmount,
+        paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString()
+      });
+
       const { data: result, error } = await supabaseAdmin.rpc('process_xendit_webhook', {
         invoice_id: paymentId,
         payment_status: paymentStatus,
@@ -133,7 +140,52 @@ app.post('/api/xendit/webhook', async (req, res) => {
 
       if (error) {
         console.error('❌ Error processing webhook:', error);
-        return res.status(500).json({ error: 'Failed to process webhook' });
+
+        // Fallback: Try to update transaction directly
+        console.log('🔄 Attempting fallback direct update...');
+
+        const { data: transaction, error: findError } = await supabaseAdmin
+          .from('payment_transactions')
+          .select('*')
+          .eq('xendit_invoice_id', paymentId)
+          .maybeSingle();
+
+        if (findError) {
+          console.error('❌ Error finding transaction:', findError);
+          return res.status(500).json({ error: 'Failed to process webhook and find transaction' });
+        }
+
+        if (!transaction) {
+          console.error('❌ Transaction not found for invoice_id:', paymentId);
+          return res.status(404).json({ error: 'Transaction not found' });
+        }
+
+        // Update transaction directly
+        const { data: updatedTransaction, error: updateError } = await supabaseAdmin
+          .from('payment_transactions')
+          .update({
+            status: paymentStatus.toLowerCase(),
+            paid_amount: paymentAmount,
+            paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', transaction.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('❌ Error updating transaction:', updateError);
+          return res.status(500).json({ error: 'Failed to update transaction' });
+        }
+
+        console.log('✅ Transaction updated via fallback method:', updatedTransaction.id);
+
+        // Activate VIP if payment is successful
+        if (paymentStatus.toLowerCase() === 'paid') {
+          await activateUserVIP(transaction.user_id, transaction.package_id);
+        }
+
+        return res.status(200).json({ success: true, event, payment_id: paymentId, method: 'fallback' });
       }
 
       console.log('✅ Webhook processed successfully');
@@ -1519,6 +1571,67 @@ async function handleReferral(newUserId, referrerId) {
     }
   } catch (error) {
     console.error('Referral handling error:', error);
+  }
+}
+
+// Helper function to activate user VIP
+async function activateUserVIP(userId, packageId) {
+  try {
+    console.log('👑 Activating VIP for user:', userId, 'package:', packageId);
+
+    // Get VIP package details
+    const { data: vipPackage, error: packageError } = await supabaseAdmin
+      .from('vip_packages')
+      .select('*')
+      .eq('id', packageId)
+      .single();
+
+    if (packageError || !vipPackage) {
+      console.error('❌ VIP package not found:', packageId);
+      return;
+    }
+
+    // Get user profile
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile) {
+      console.error('❌ User profile not found:', userId);
+      return;
+    }
+
+    // Calculate new VIP expiry
+    let newVipExpiresAt;
+    if (profile.is_vip && profile.vip_expires_at && new Date(profile.vip_expires_at) > new Date()) {
+      // Extend existing VIP
+      newVipExpiresAt = new Date(profile.vip_expires_at);
+      newVipExpiresAt.setDate(newVipExpiresAt.getDate() + vipPackage.duration_days);
+    } else {
+      // Start new VIP
+      newVipExpiresAt = new Date();
+      newVipExpiresAt.setDate(newVipExpiresAt.getDate() + vipPackage.duration_days);
+    }
+
+    // Update user VIP status
+    const { error: vipError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        is_vip: true,
+        vip_expires_at: newVipExpiresAt.toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+
+    if (vipError) {
+      console.error('❌ Error updating VIP status:', vipError);
+    } else {
+      console.log('✅ VIP activated for user:', profile.telegram_id, 'expires:', newVipExpiresAt);
+    }
+  } catch (error) {
+    console.error('❌ Error activating VIP:', error);
   }
 }
 
