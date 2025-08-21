@@ -262,7 +262,7 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 // Create Xendit invoice endpoint
 app.post('/api/xendit/create-invoice', async (req, res) => {
   try {
-    const { telegramId, packageId, userData } = req.body;
+    const { telegramId, packageId, userData, paymentMethod } = req.body;
 
     // Enhanced validation
     if (!telegramId || !packageId || !userData) {
@@ -272,6 +272,8 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
         error: 'Missing required parameters: telegramId, packageId, and userData are required'
       });
     }
+
+    console.log('💳 Payment method requested:', paymentMethod || 'default');
 
     console.log('🔍 Looking for VIP package:', packageId);
 
@@ -321,6 +323,29 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
 
     console.log('🏷️ Generated external_id:', externalId);
 
+    // Prepare payment methods based on selection
+    let paymentMethods = ['BCA', 'BNI', 'BRI', 'MANDIRI', 'OVO', 'DANA', 'LINKAJA', 'SHOPEEPAY', 'GOPAY', 'QRIS'];
+
+    if (paymentMethod) {
+      switch (paymentMethod) {
+        case 'QRIS':
+          paymentMethods = ['QRIS'];
+          break;
+        case 'BANK_TRANSFER':
+          paymentMethods = ['BCA', 'BNI', 'BRI', 'MANDIRI'];
+          break;
+        case 'E_WALLET':
+          paymentMethods = ['OVO', 'DANA', 'LINKAJA', 'SHOPEEPAY', 'GOPAY'];
+          break;
+        case 'VIRTUAL_ACCOUNT':
+          paymentMethods = ['BCA', 'BNI', 'BRI'];
+          break;
+        default:
+          // Use all methods if no specific method selected
+          break;
+      }
+    }
+
     // Prepare Xendit invoice request
     const invoiceRequest = {
       external_id: externalId,
@@ -337,7 +362,7 @@ app.post('/api/xendit/create-invoice', async (req, res) => {
       ],
       success_redirect_url: `${process.env.FRONTEND_URL || 'https://testelegramwebapp-main.vercel.app'}/payment/success?invoice_id=${externalId}`,
       failure_redirect_url: `${process.env.FRONTEND_URL || 'https://testelegramwebapp-main.vercel.app'}/payment/failed?invoice_id=${externalId}`,
-      payment_methods: ['BCA', 'BNI', 'BRI', 'MANDIRI', 'OVO', 'DANA', 'LINKAJA', 'SHOPEEPAY', 'GOPAY', 'QRIS'],
+      payment_methods: paymentMethods,
       should_send_email: false,
       customer: {
         given_names: userData.firstName || userData.first_name || 'Unknown',
@@ -582,6 +607,96 @@ app.get('/api/user-transactions/:telegramId', async (req, res) => {
       error: 'Internal server error',
       details: error.message
     });
+  }
+});
+
+// Manual payment processing endpoint (for testing)
+app.post('/api/manual-payment-process', async (req, res) => {
+  try {
+    const { invoice_id, status, amount } = req.body;
+
+    console.log('🔧 Manual payment processing:', { invoice_id, status, amount });
+
+    // Find the transaction
+    const { data: transaction, error: findError } = await supabaseAdmin
+      .from('payment_transactions')
+      .select('*')
+      .eq('xendit_invoice_id', invoice_id)
+      .single();
+
+    if (findError || !transaction) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Update transaction status
+    const { data: updatedTransaction, error: updateError } = await supabaseAdmin
+      .from('payment_transactions')
+      .update({
+        status: status,
+        paid_amount: amount,
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', transaction.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: 'Failed to update transaction' });
+    }
+
+    // If payment is successful, activate VIP
+    if (status === 'PAID') {
+      // Get VIP package details
+      const { data: vipPackage } = await supabaseAdmin
+        .from('vip_packages')
+        .select('*')
+        .eq('id', transaction.package_id)
+        .single();
+
+      if (vipPackage) {
+        // Get user profile
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('*')
+          .eq('id', transaction.user_id)
+          .single();
+
+        if (profile) {
+          // Calculate new VIP expiry
+          let newVipExpiresAt;
+          if (profile.is_vip && profile.vip_expires_at > new Date()) {
+            newVipExpiresAt = new Date(profile.vip_expires_at);
+            newVipExpiresAt.setDate(newVipExpiresAt.getDate() + vipPackage.duration_days);
+          } else {
+            newVipExpiresAt = new Date();
+            newVipExpiresAt.setDate(newVipExpiresAt.getDate() + vipPackage.duration_days);
+          }
+
+          // Update user VIP status
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              is_vip: true,
+              vip_expires_at: newVipExpiresAt.toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', profile.id);
+
+          console.log('✅ VIP activated for user:', profile.telegram_id);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Payment processed successfully',
+      transaction: updatedTransaction
+    });
+
+  } catch (error) {
+    console.error('❌ Manual payment processing error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
